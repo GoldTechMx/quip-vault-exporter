@@ -29,7 +29,7 @@ pytest                # tests (incl. the in-process CLI e2e)
 - **Respect the rate limits.** New API calls must go through the shared client (and thus the
   adaptive rate limiter). Don't bypass it.
 - **Validate against a live tenant** any change to the async-export or Admin-API field
-  shapes — these vary by tenant and are centralized in `quip_client.py` / `org.py`.
+  shapes - these vary by tenant and are centralized in `quip_client.py` / `org.py`.
 - Add tests for new behavior; prefer the in-process mock server (`tests/test_cli_e2e.py`)
   for end-to-end coverage and `pytest-httpx` for client-level tests.
 - Update `CHANGELOG.md` under "Unreleased".

@@ -1,4 +1,4 @@
-"""Read-only Quip API client — the single network choke point.
+"""Read-only Quip API client - the single network choke point.
 
 Design guarantees (see CLAUDE.md):
   * READ-ONLY, fail-closed: only GET requests to an allowlisted set of path prefixes are
@@ -8,7 +8,7 @@ Design guarantees (see CLAUDE.md):
     NO Retry-After. Backoff is driven by the X-(Company-)RateLimit-Reset epoch headers via
     the limiter, with exponential + jitter as the fallback.
   * Pagination is first-class: `paginate_messages` walks the full comment history with the
-    `max_created_usec` cursor — 25/100 is a page size, never a cap.
+    `max_created_usec` cursor - 25/100 is a page size, never a cap.
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ class QuipClient:
             timeout=timeout,
         )
         # Lazily-created, reused, UNAUTHENTICATED client for signed export/blob URLs (a
-        # different host — the bearer token must never be sent there).
+        # different host - the bearer token must never be sent there).
         self._anon: httpx.Client | None = None
 
     def _anon_client(self) -> httpx.Client:
@@ -108,7 +108,7 @@ class QuipClient:
         if method != "GET":
             if not (allow_export and path.startswith(_EXPORT_ALLOWLIST)):
                 raise ReadOnlyViolation(
-                    f"Refusing non-GET request {method} {path} — tool is read-only."
+                    f"Refusing non-GET request {method} {path} - tool is read-only."
                 )
         elif not path.startswith(_READ_ALLOWLIST):
             raise ReadOnlyViolation(f"Path {path} is not on the read allowlist.")
@@ -178,7 +178,7 @@ class QuipClient:
         return self._get_dict(f"/1/folders/{','.join(ids)}")
 
     def get_thread(self, thread_id: str) -> dict[str, Any]:
-        """Full thread object — includes rendered HTML under the `html` key."""
+        """Full thread object - includes rendered HTML under the `html` key."""
         return self._get_dict(f"/1/threads/{thread_id}")
 
     # -- admin / organization (Phase 4) ---------------------------------------------------
@@ -186,7 +186,7 @@ class QuipClient:
         """All company members (admin token), merged across cursor pages.
 
         GET /1/users/company-members returns a map user_id -> user object plus a `has_more`
-        flag and a cursor. Field/cursor names vary by tenant — handled tolerantly. Uses the
+        flag and a cursor. Field/cursor names vary by tenant - handled tolerantly. Uses the
         admin rate budget (~100/min, 1500/hr).
         """
         members: dict[str, Any] = {}
@@ -259,7 +259,7 @@ class QuipClient:
 
         Uses a SEPARATE, reused client with NO Authorization header (signed URLs point at a
         different host; the bearer token must never be sent there) and validates the URL is
-        HTTPS to a non-private host first (anti-SSRF — the URL comes from the export poll
+        HTTPS to a non-private host first (anti-SSRF - the URL comes from the export poll
         response, which the tool does not fully control).
         """
         if not _is_safe_export_url(url):
@@ -322,7 +322,7 @@ def _is_safe_export_url(url: str) -> bool:
     try:
         ip = ipaddress.ip_address(host)  # only when host is a literal IP
     except ValueError:
-        return True  # a DNS name to a public host — accepted
+        return True  # a DNS name to a public host - accepted
     return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved)
 
 

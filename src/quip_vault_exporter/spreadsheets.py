@@ -1,6 +1,6 @@
 """Spreadsheet export (Phase 3).
 
-Quip spreadsheets export as XLSX via the API. **CSV is NOT a native Quip export** — it is
+Quip spreadsheets export as XLSX via the API. **CSV is NOT a native Quip export** - it is
 derived locally from the XLSX with openpyxl. When a spreadsheet can't be represented as
 Markdown, we still write a Markdown wrapper note that links to the external files, so the
 spreadsheet has a first-class presence in the Obsidian vault.

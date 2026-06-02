@@ -5,7 +5,7 @@ validation report (`../../VALIDATION_REPORT.md`).
 
 ## Platform / lifecycle
 - **Quip is being retired.** EOL announced 2026-03-04; no renewals after 2027-03-01; then
-  Read-Only → Blocked → Deletion. **The API stops at the Read-Only phase** — export before
+  Read-Only → Blocked → Deletion. **The API stops at the Read-Only phase** - export before
   your tenant gets there.
 
 ## Comments
@@ -19,12 +19,12 @@ validation report (`../../VALIDATION_REPORT.md`).
 - Per-token ceilings: **50 requests/minute AND 750 requests/hour**; **600/minute**
   company-wide (admin tokens ~100/min + 1500/hr). The **hourly** budget is the binding
   constraint for large accounts.
-- Throttling is **HTTP 503 "Over Rate Limit"** (not 429). Quip sends **no Retry-After** —
+- Throttling is **HTTP 503 "Over Rate Limit"** (not 429). Quip sends **no Retry-After** -
   the client backs off using `X-Ratelimit-Reset` (a UTC epoch) and pauses proactively when
   `X-Ratelimit-Remaining` is low, so big exports glide under the limits.
 
 ## Spreadsheets (Phase 3)
-- Exportable as XLSX/PDF/HTML/JSON via the API. **CSV is not a native export** — it is
+- Exportable as XLSX/PDF/HTML/JSON via the API. **CSV is not a native export** - it is
   derived locally from XLSX (openpyxl).
 - PDF rendering caps at ~40,000 cells and excludes charts.
 

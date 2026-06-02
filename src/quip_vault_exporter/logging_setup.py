@@ -99,7 +99,7 @@ def configure_logging(secrets: list[str], level: int = logging.INFO) -> logging.
     root.addFilter(redaction)  # belt and suspenders
     root.setLevel(level)
 
-    # HTTPX can log full request URLs (with signed query strings) at DEBUG — keep it quiet.
+    # HTTPX can log full request URLs (with signed query strings) at DEBUG - keep it quiet.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 

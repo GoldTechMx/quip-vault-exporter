@@ -9,7 +9,7 @@ hours. Do not include real tokens, PII, or exported customer data in reports.
 ## Security model
 
 This tool is **read-only** and handles sensitive material (Quip access tokens, exported
-workspace content, and — in admin mode — personal data). The design enforces:
+workspace content, and - in admin mode - personal data). The design enforces:
 
 - **Read-only, fail-closed networking.** `quip_client.py` only issues GET requests to an
   allowlisted set of path prefixes; the single non-GET path (async export jobs, which do
@@ -28,8 +28,8 @@ workspace content, and — in admin mode — personal data). The design enforces
 
 ## Operator responsibilities (the export is sensitive at rest)
 
-- Treat the export tree as confidential: it contains workspace content, and — in admin mode
-  — user and permission data (PII). Store it on encrypted-at-rest media; consider
+- Treat the export tree as confidential: it contains workspace content, and - in admin mode
+  - user and permission data (PII). Store it on encrypted-at-rest media; consider
   `--redact-emails` / `--no-users` / `--no-permissions` for data minimization.
 - Keep `.env` out of version control (the provided `.gitignore` does this) and rotate any
   token that may have been exposed.

@@ -2,15 +2,15 @@
 
 Quip's PDF export is asynchronous: start a render job (returns a request_id), poll until it
 reports success/failure, then download the resulting PDF URL. A large document can take up
-to ~10 minutes. The poller here is deliberately endpoint-agnostic — it consumes whatever
+to ~10 minutes. The poller here is deliberately endpoint-agnostic - it consumes whatever
 status dict `QuipClient.poll_pdf_export` returns and tolerates the common field-name
-variants — so it is fully unit-tested without a live tenant.
+variants - so it is fully unit-tested without a live tenant.
 
 Safety properties for large-account runs:
   * start/poll go through the client's shared "export" rate budget (counts against the same
     per-minute / per-hour ceilings as everything else);
   * a per-job wall-clock timeout prevents a stuck job from blocking the whole export;
-  * a failed/timed-out PDF is recorded and skipped — it never aborts the document;
+  * a failed/timed-out PDF is recorded and skipped - it never aborts the document;
   * the signed PDF URL is downloaded WITHOUT the auth token (see client.download_url).
 """
 

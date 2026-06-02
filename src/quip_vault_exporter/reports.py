@@ -147,7 +147,7 @@ def verify(state: StateDB, config: Config, manifest_dir: Path) -> dict[str, Any]
         f"- Total inventory items: {total}",
         f"- Exported (complete): {complete}",
         f"- Failed: {failed}",
-        f"- Left in_progress (incomplete — rerun `resume`): {in_progress}",
+        f"- Left in_progress (incomplete - rerun `resume`): {in_progress}",
         f"- Threads with truncated comments: {truncated_comments}",
         f"- Complete docs missing a checksum: {empty_md}",
         "",

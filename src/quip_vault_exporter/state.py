@@ -178,7 +178,7 @@ class StateDB:
         """Incremental skip decision.
 
         Primary signal is `updated_usec` (body edits). Title renames and folder moves do NOT
-        bump `updated_usec`, but inventory already knows them for free — so we also re-export
+        bump `updated_usec`, but inventory already knows them for free - so we also re-export
         when they change (a rename/move changes the file path and inbound wikilinks).
         NOTE: comment-only and attachment-only changes are NOT detected by --incremental
         (they'd require per-thread API calls); re-run without --incremental to capture them.

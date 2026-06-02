@@ -1,7 +1,7 @@
 # Quip Vault Exporter
 
 A **read-only** tool (CLI **and** local web UI) that exports a Quip workspace into a local,
-portable, Obsidian-ready Markdown vault — with HTML, raw JSON, comments, attachments,
+portable, Obsidian-ready Markdown vault - with HTML, raw JSON, comments, attachments,
 spreadsheets, optional PDFs, admin/organization metadata, and an audit-ready manifest. Built
 as a defensible backup for teams leaving Quip, with adaptive rate-limiting, incremental
 re-export, resume, and live progress/ETA.
@@ -16,7 +16,7 @@ re-export, resume, and live progress/ETA.
 > Salesforce has announced Quip end-of-life (EOL announced **2026-03-04**; no renewals
 > after **2027-03-01**; then **Read-Only → Blocked → Deletion**). **The Quip API stops
 > working once your tenant reaches the Read-Only phase.** This tool is a *time-boxed
-> migration aid* — finish your export before your subscription lapses.
+> migration aid* - finish your export before your subscription lapses.
 
 > ## Important Limitation
 > Quip API access varies by account, permissions, and whether the Admin API is enabled.
@@ -56,9 +56,9 @@ QUIP_ACCESS_TOKEN=...
 QUIP_BASE_URL=https://platform.quip.com   # enterprise tenants may differ
 ```
 
-## Web UI (easiest — just paste your token)
+## Web UI (easiest - just paste your token)
 A simple local web UI lets you paste your Quip token, validate it, pick options, and run
-the export with a live progress bar — no terminal needed.
+the export with a live progress bar - no terminal needed.
 
 ```bash
 pip install -e ".[web]"        # or:  pip install 'quip-vault-exporter[web]'
@@ -70,14 +70,14 @@ Then open <http://127.0.0.1:8000>, paste your token (from
 folder** with the built-in **Browse…** picker (navigates the server's filesystem and can
 create a new subfolder), and run **Inventory / Export / Verify** with a live progress bar.
 You get **live progress + ETA** per phase, and can **Pause/Resume** or **Cancel** a running
-export at any time (cancel is safe — re-run Export with **Incremental** to continue where it
+export at any time (cancel is safe - re-run Export with **Incremental** to continue where it
 left off). The token stays in the server's memory and is never logged; tick **Remember in
 .env** to persist it for CLI reuse. Binds to `127.0.0.1` by default (`--host 0.0.0.0` to
-expose it — only behind your own auth/network).
+expose it - only behind your own auth/network).
 
 ### Rate limits are handled automatically
 The client respects Quip's limits (50/min **and** 750/hour per token; 600/min company-wide)
-and **auto-pauses and resumes** when it nears a limit or hits an HTTP 503 — backing off until
+and **auto-pauses and resumes** when it nears a limit or hits an HTTP 503 - backing off until
 the `X-Ratelimit-Reset` time. These waits are logged ("auto-pausing ~Ns until reset") so the
 UI shows them instead of looking frozen. No action needed on your part.
 
@@ -108,7 +108,7 @@ The image is multi-stage, runs as a **non-root** user, and installs from a pinne
 # Build (slim, markdownify-only). Use --target full for the Pandoc-enabled image.
 docker build -t quip-vault-exporter:latest --target base .
 
-# Run a one-shot export (batch tool — each run performs one command and exits).
+# Run a one-shot export (batch tool - each run performs one command and exits).
 docker run --rm \
   --env-file .env \
   -v "$(pwd)/exports:/app/exports" \
@@ -136,15 +136,15 @@ Comments are exported in full by paginating with the `max_created_usec` cursor. 
 manifest records the true message count and flags any thread where pagination was cut short.
 
 ## Safe cancellation checklist
-After every export the tool writes `_manifest/cancellation_checklist.md`. Complete it —
-including verifying the vault opens in Obsidian and copying the export offsite — **before**
+After every export the tool writes `_manifest/cancellation_checklist.md`. Complete it -
+including verifying the vault opens in Obsidian and copying the export offsite - **before**
 canceling Quip.
 
 ## Troubleshooting
-- **`Configuration error: QUIP_ACCESS_TOKEN is not set`** — copy `.env.example` to `.env`.
-- **HTTP 503 "Over Rate Limit"** — expected under load; the client backs off automatically
+- **`Configuration error: QUIP_ACCESS_TOKEN is not set`** - copy `.env.example` to `.env`.
+- **HTTP 503 "Over Rate Limit"** - expected under load; the client backs off automatically
   using server headers. Lower `limits.requests_per_minute` if it persists.
-- **Wrong base URL** — enterprise tenants aren't all on `platform.quip.com`; set
+- **Wrong base URL** - enterprise tenants aren't all on `platform.quip.com`; set
   `QUIP_BASE_URL`.
 
 ## License

@@ -22,7 +22,7 @@ services:
     command: ["export", "--config", "/app/config.yml"]
 
   # Optional local web UI:  docker compose --profile web up web
-  # then open http://127.0.0.1:8000  (published to localhost only — front with your own auth
+  # then open http://127.0.0.1:8000  (published to localhost only - front with your own auth
   # before exposing beyond your machine).
   web:
     profiles: ["web"]

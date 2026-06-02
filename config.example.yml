@@ -1,4 +1,4 @@
-# Quip Vault Exporter — configuration (NO TOKENS HERE; tokens live in .env only)
+# Quip Vault Exporter - configuration (NO TOKENS HERE; tokens live in .env only)
 workspace_name: "Company Quip Archive"
 output_dir: "./exports/quip-vault"
 obsidian_mode: true
@@ -62,5 +62,5 @@ safety:
 
 compliance:
   redact_emails: false
-  export_users: true          # PII — opt-out with --no-users
-  export_permissions: true    # PII — opt-out with --no-permissions
+  export_users: true          # PII - opt-out with --no-users
+  export_permissions: true    # PII - opt-out with --no-permissions

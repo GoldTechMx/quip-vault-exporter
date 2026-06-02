@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
 
-# Least privilege: CI only reads the repo. No live Quip token is ever used — the client is
+# Least privilege: CI only reads the repo. No live Quip token is ever used - the client is
 # exercised against in-process mocks / pytest-httpx.
 permissions:
   contents: read
@@ -43,7 +43,7 @@ jobs:
         # tests/ is gitignored (kept out of the published repo); run them only when present
         # (i.e. in a dev checkout that has them).
         run: |
-          if [ -d tests ]; then pytest; else echo "No tests/ in repo (gitignored) — skipping."; fi
+          if [ -d tests ]; then pytest; else echo "No tests/ in repo (gitignored) - skipping."; fi
 
   build-wheel:
     runs-on: ubuntu-latest

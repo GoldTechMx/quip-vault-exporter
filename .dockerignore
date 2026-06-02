@@ -4,13 +4,13 @@
 .gitignore
 .dockerignore
 
-# Secrets & local config — NEVER ship these in an image
+# Secrets & local config - NEVER ship these in an image
 .env
 .env.*
 !.env.example
 config.yml
 
-# Export output, state, and PII — must never land in an image layer
+# Export output, state, and PII - must never land in an image layer
 exports/
 **/_quip_export_state.sqlite*
 **/*.raw.json

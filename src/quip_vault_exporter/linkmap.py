@@ -2,8 +2,8 @@
 
 Builds the complete `thread_id -> {title, vault_path}` map for the WHOLE export set before
 any document is rendered. Pass 2 (obsidian.py) resolves link tokens against this finished
-map. The map must include every exportable thread — even ones skipped on an incremental run
-— or inbound wikilinks to a skipped doc would break.
+map. The map must include every exportable thread - even ones skipped on an incremental run
+- or inbound wikilinks to a skipped doc would break.
 """
 
 from __future__ import annotations

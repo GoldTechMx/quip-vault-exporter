@@ -5,7 +5,7 @@ Per thread, with crash-safe state transitions (pending -> in_progress -> complet
   * optionally export comments via full pagination;
   * record errors without ever stopping the whole run.
 
-Incremental skip uses `updated_usec`. `dry_run` writes nothing — not even state.
+Incremental skip uses `updated_usec`. `dry_run` writes nothing - not even state.
 Asset download, PDF, and spreadsheets are later phases; their hooks are stubbed.
 """
 
@@ -165,8 +165,8 @@ class Exporter:
 
         is_spreadsheet = (thread.get("type") or entry.type) == "spreadsheet"
 
-        # Markdown (frontmatter + resolved wikilinks + asset embeds), or — for spreadsheets
-        # — an XLSX/CSV export plus a Markdown wrapper note.
+        # Markdown (frontmatter + resolved wikilinks + asset embeds), or - for spreadsheets
+        # - an XLSX/CSV export plus a Markdown wrapper note.
         markdown_body = ""
         if is_spreadsheet and cfg.spreadsheets:
             sheet_result = export_spreadsheet(

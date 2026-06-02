@@ -24,7 +24,7 @@ dropped.
 
 ## 4. Frontmatter
 Every note carries `source`, `thread_id`, `aliases` (raw title + id), timestamps,
-`original_url`, `folder_path`, and `parent_folder_ids` — so every file traces back to its
+`original_url`, `folder_path`, and `parent_folder_ids` - so every file traces back to its
 Quip source.
 
 ## 5. Comments
@@ -33,5 +33,5 @@ fidelity), paginated in full.
 
 ## 6. Before canceling Quip
 Work through `_manifest/cancellation_checklist.md`. In particular: open a sample of notes in
-Obsidian, confirm links/embeds resolve, keep the raw JSON, and copy the export offsite —
+Obsidian, confirm links/embeds resolve, keep the raw JSON, and copy the export offsite -
 **all before your tenant reaches the Read-Only phase.**

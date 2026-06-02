@@ -1,6 +1,6 @@
 """Comment/message export with FULL pagination.
 
-The original spec's "25 most recent" claim is wrong — see CLAUDE.md. This module walks the
+The original spec's "25 most recent" claim is wrong - see CLAUDE.md. This module walks the
 entire message history via QuipClient.paginate_messages and records the true total in state,
 so the manifest can honestly report completeness instead of silently truncating.
 """
@@ -31,7 +31,7 @@ def export_comments(
     """Export all messages for a thread as JSON + readable Markdown.
 
     Returns {"count": int, "truncated": bool}. `truncated` stays False unless pagination
-    was cut short by an error — a real signal for the manifest, not a guess.
+    was cut short by an error - a real signal for the manifest, not a guess.
     """
     user_names = user_names or {}
     secrets = secrets or []
@@ -67,7 +67,7 @@ def _render_markdown(title: str, rows: list[dict[str, Any]]) -> str:
     for row in rows:  # newest-first from the API; readable as-is
         when = row.get("created_at") or "unknown time"
         who = row.get("author") or "unknown"
-        lines.append(f"## {when} — {who}")
+        lines.append(f"## {when} - {who}")
         lines.append("")
         lines.append(row.get("text", "").strip())
         lines.append("")

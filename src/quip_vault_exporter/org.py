@@ -1,14 +1,14 @@
 """Organization / admin metadata export (Phase 4).
 
 Runs only when admin mode is enabled AND the operator passes --i-understand-admin-scope.
-Uses an admin-scoped client (QUIP_ADMIN_TOKEN, strictly separate from QUIP_ACCESS_TOKEN —
+Uses an admin-scoped client (QUIP_ADMIN_TOKEN, strictly separate from QUIP_ACCESS_TOKEN -
 never falls back) with the admin rate budget (~100/min, 1500/hr).
 
 Outputs:
   _manifest/organization.json   org metadata + the admin-run audit record
-  _manifest/users.{json,csv}    company members (PII — opt-out with --no-users)
+  _manifest/users.{json,csv}    company members (PII - opt-out with --no-users)
   _manifest/folders.csv         folder tree (from the already-traversed inventory)
-  _manifest/permissions.csv     folder -> member mapping (PII — opt-out with --no-permissions)
+  _manifest/permissions.csv     folder -> member mapping (PII - opt-out with --no-permissions)
 
 COMPLIANCE: users/permissions are personal data (GDPR/CCPA). Export is opt-in; emails can be
 redacted (--redact-emails); the manifest records which PII categories were written.
@@ -80,7 +80,7 @@ def export_organization(
     compliance = config.compliance
     pii: list[str] = []
 
-    # Users (company members) — the Admin-API-gated part.
+    # Users (company members) - the Admin-API-gated part.
     members: dict[str, Any] = {}
     if compliance.export_users:
         try:

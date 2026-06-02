@@ -2,7 +2,7 @@
 
 A `Control` is shared between the web job thread and the inventory/exporter loops. They call
 `checkpoint()` between work items: it blocks while paused and raises `Cancelled` if the user
-cancelled. Cancellation is cooperative and safe — the current item finishes, state is already
+cancelled. Cancellation is cooperative and safe - the current item finishes, state is already
 persisted atomically per document, so a cancelled export can be continued later with an
 incremental run (completed documents are skipped).
 """

@@ -121,7 +121,7 @@ class Inventory:
         control: Control | None = None,
     ) -> None:
         if folder_id in ancestry:
-            log.warning("Folder cycle detected at %s — skipping back-edge", folder_id)
+            log.warning("Folder cycle detected at %s - skipping back-edge", folder_id)
             return
         if control is not None:
             control.checkpoint()  # blocks if paused; raises Cancelled if cancelled

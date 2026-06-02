@@ -1,9 +1,9 @@
 """Simple local web UI for Quip Vault Exporter.
 
 A FastAPI app + a single embedded HTML page so a non-CLI user can: paste a Quip token,
-validate it, pick options, and run inventory/export/verify with live progress — without
+validate it, pick options, and run inventory/export/verify with live progress - without
 touching the terminal. Token handling matches the CLI's guarantees:
-  * the token lives in the server process memory only (never logged — the root logger's
+  * the token lives in the server process memory only (never logged - the root logger's
     RedactionFilter scrubs it), and is optionally persisted to `.env` if "remember" is set;
   * everything stays read-only.
 
@@ -125,7 +125,7 @@ def _write_env(token: str, base_url: str) -> None:
 def _browse(raw: str | None) -> dict[str, Any]:
     """List the immediate subfolders of `raw` on the SERVER filesystem (for the picker).
 
-    Localhost-only by design. Returns no file contents — only directory names — and degrades
+    Localhost-only by design. Returns no file contents - only directory names - and degrades
     gracefully on permission/IO errors so the picker can never crash the server.
     """
     base = Path(raw).expanduser() if raw else Path.home()

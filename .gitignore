@@ -1,4 +1,4 @@
-# Secrets — never commit
+# Secrets - never commit
 .env
 .env.*
 !.env.example
@@ -28,7 +28,7 @@ venv/
 .coverage
 htmlcov/
 
-# Tests & local dev support — not required to USE the tool, kept out of the published repo
+# Tests & local dev support - not required to USE the tool, kept out of the published repo
 tests/
 conftest.py
 .lockenv/

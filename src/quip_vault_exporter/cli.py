@@ -285,7 +285,7 @@ def main() -> None:
         console.print(f"[red]Configuration error:[/red] {exc}")
         sys.exit(2)
     except QuipError as exc:
-        # Network/auth/API failures are expected operational errors — show them cleanly
+        # Network/auth/API failures are expected operational errors - show them cleanly
         # (already token-scrubbed) instead of a raw traceback.
         console.print(f"[red]Quip API error:[/red] {exc}")
         console.print(

@@ -2,7 +2,7 @@
 
 Quip's documented limits (per token): **50 requests/minute AND 750 requests/hour**, plus a
 **600/minute company-wide** ceiling shared by everyone. For an account with thousands of
-files the *hourly* budget is the real constraint — at a flat 50/min you exhaust 750 in ~15
+files the *hourly* budget is the real constraint - at a flat 50/min you exhaust 750 in ~15
 minutes and then stall. So this limiter enforces BOTH a per-minute and a per-hour token
 bucket, and additionally adapts to the server's own accounting.
 
@@ -62,7 +62,7 @@ class RateLimiter:
         self._lock = threading.Lock()
         self._buckets: dict[str, list[_Bucket]] = {}
         # The company minute-limit (600/min) is SHARED across every budget, so it gets its
-        # own bucket that every acquire() also debits — proactive, not just reactive.
+        # own bucket that every acquire() also debits - proactive, not just reactive.
         now0 = self._mono()
         self._company = _Bucket(
             self._company_per_minute,
@@ -89,7 +89,7 @@ class RateLimiter:
         """Block until a request slot is available on every budget dimension."""
         while True:
             with self._lock:
-                # 1. Respect an active pause window — the budget's own AND the company's.
+                # 1. Respect an active pause window - the budget's own AND the company's.
                 pause = max(
                     self._pause_until.get(budget, 0.0),
                     self._pause_until.get("__company__", 0.0),

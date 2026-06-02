@@ -11,7 +11,7 @@ Obsidian-ready Markdown vault with an audit manifest.
 
 ### Added
 - **CLI** (`init`, `inventory`, `export`, `verify`, `report`, `resume`, `serve`) built on Typer.
-- **Local web UI** (`serve`) — a FastAPI + single-page app to paste a token, validate it,
+- **Local web UI** (`serve`) - a FastAPI + single-page app to paste a token, validate it,
   pick options, choose the output folder via a built-in server-side **folder picker**, and
   run the export with **live progress + ETA**, **pause/resume**, and **cancel** (cooperative;
   re-run with Incremental to continue). Token stays in memory (optionally remembered in
@@ -24,11 +24,11 @@ Obsidian-ready Markdown vault with an audit manifest.
   long wait near the limit no longer looks frozen.
 - **Read-only Quip client** with a fail-closed method+endpoint allowlist.
 - **Adaptive rate limiting** honoring Quip's real limits: 50 req/min **and** 750 req/hour
-  per token, plus a shared 600/min company budget — all enforced proactively. Backoff is
+  per token, plus a shared 600/min company budget - all enforced proactively. Backoff is
   driven by the `X-Ratelimit-Reset` epoch header (Quip returns HTTP 503, not 429, and sends
   no `Retry-After`).
 - **Full comment pagination** via the `max_created_usec` cursor (25/100 is a page size, not
-  a cap — boundary timestamps are never dropped).
+  a cap - boundary timestamps are never dropped).
 - **Two-pass Obsidian link map** with deterministic, collision-safe filenames; unresolved
   links fall back to the original Quip URL.
 - **Attachment/image download** with reference rewriting to Obsidian embeds.
@@ -51,7 +51,7 @@ Obsidian-ready Markdown vault with an audit manifest.
 - SQL identifier allowlist on state writes.
 
 ### Known limitations
-- Quip is being retired by Salesforce; the API stops at the Read-Only phase — finish your
+- Quip is being retired by Salesforce; the API stops at the Read-Only phase - finish your
   export before your tenant's subscription lapses.
 - The exact request/response field names for async PDF export and Admin API
   organization/permissions vary by tenant; validate against your live tenant (they are
