@@ -19,6 +19,16 @@ mypy src              # types (strict)
 pytest                # tests (incl. the in-process CLI e2e)
 ```
 
+## Architecture (where things go)
+
+`export` is a four-phase pipeline (`pipeline.run_export`):
+**SCAN** (`inventory.py`) -> **DOWNLOAD** (`downloader.py`, API -> `RawStore` in `cache.py`)
+-> **LINK MAP** (`linkmap.py`) -> **PROCESS** (`processor.py`, local render, no API).
+
+- API calls belong in the **download** phase (so the run stays resumable). Rendering belongs
+  in the **process** phase (local, re-runnable). Do not fetch from the API during processing.
+- Preserve Quip's folder structure: paths come from the scan and flow through unchanged.
+
 ## Guidelines
 
 - **Keep the tool read-only.** Never add a code path that creates, modifies, moves, or

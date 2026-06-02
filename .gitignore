@@ -10,6 +10,7 @@ exports/
 **/*.raw.json
 **/_assets/
 **/_manifest/
+**/_raw/
 
 # Python
 __pycache__/

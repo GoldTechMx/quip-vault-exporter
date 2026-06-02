@@ -70,7 +70,19 @@ CREATE TABLE IF NOT EXISTS errors (
 );
 """
 
-VALID_STATUSES = {"pending", "in_progress", "complete", "failed", "partial"}
+# Per-document lifecycle:
+#   pending -> downloading -> downloaded -> processing -> complete   (or failed | partial)
+# DOWNLOAD (API) advances pending->downloaded; PROCESS (local) advances downloaded->complete.
+VALID_STATUSES = {
+    "pending",
+    "downloading",
+    "downloaded",
+    "processing",
+    "in_progress",
+    "complete",
+    "failed",
+    "partial",
+}
 
 # Column allowlist for upsert_thread: makes SQL-identifier safety explicit rather than
 # trusting every caller to pass only literal column names.
@@ -102,6 +114,9 @@ class StateDB:
         self._conn = sqlite3.connect(str(db_path))
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        # NORMAL is safe under WAL and avoids an fsync on every commit; the pipeline writes
+        # several state rows per document, so at 12k+ docs this removes ~80k fsyncs.
+        self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
 
@@ -167,33 +182,9 @@ class StateDB:
     def all_threads(self) -> list[dict[str, Any]]:
         return [dict(r) for r in self._conn.execute("SELECT * FROM threads").fetchall()]
 
-    def needs_export(
-        self,
-        thread_id: str,
-        current_updated_usec: int | None,
-        *,
-        current_title: str | None = None,
-        current_folder_path: str | None = None,
-    ) -> bool:
-        """Incremental skip decision.
-
-        Primary signal is `updated_usec` (body edits). Title renames and folder moves do NOT
-        bump `updated_usec`, but inventory already knows them for free - so we also re-export
-        when they change (a rename/move changes the file path and inbound wikilinks).
-        NOTE: comment-only and attachment-only changes are NOT detected by --incremental
-        (they'd require per-thread API calls); re-run without --incremental to capture them.
-        """
-        row = self.get_thread(thread_id)
-        if row is None or row["export_status"] != "complete":
-            return True
-        if current_title is not None and current_title != (row["title"] or ""):
-            return True
-        if current_folder_path is not None and current_folder_path != (row["folder_path"] or ""):
-            return True
-        prev = row["last_seen_updated_usec"]
-        if prev is None or current_updated_usec is None:
-            return True
-        return bool(current_updated_usec > int(prev))
+    def all_threads_map(self) -> dict[str, dict[str, Any]]:
+        """All thread rows keyed by thread_id (one scan, for cheap bulk rehydration)."""
+        return {r["thread_id"]: dict(r) for r in self._conn.execute("SELECT * FROM threads")}
 
     # -- link map ------------------------------------------------------------------------
     def set_linkmap(self, thread_id: str, title: str, vault_path: str) -> None:

@@ -16,13 +16,12 @@ import typer
 from rich.console import Console
 
 from . import EOL_NOTICE, __version__
-from .cache import ThreadCache
+from .cache import RawStore
 from .config import Config, ConfigError, Settings
-from .exporter import Exporter
 from .inventory import Inventory
-from .linkmap import LinkMap
 from .logging_setup import configure_logging
 from .org import export_organization
+from .pipeline import run_export
 from .quip_client import QuipClient, QuipError
 from .ratelimit import RateLimiter
 from .reports import (
@@ -137,26 +136,31 @@ def init(
 
 @app.command()
 def inventory(config: ConfigOpt = Path("config.yml")) -> None:
-    """Scan folders/threads and write the inventory manifest."""
+    """Scan the folder tree and write the inventory manifest (fast structural preview).
+
+    Titles/timestamps are filled in during `export` (the download phase); this command only
+    maps the structure, so it makes one API call per folder, not per document.
+    """
     _banner()
     cfg, _settings, state, client, _secrets = _bootstrap(config)
     with client, state:
         inv = Inventory(cfg, client)
         console.print("Scanning folders...")
         inv.scan()
-        inv.hydrate_threads()
         inv.persist(state)
         inv.write_manifest(_manifest_dir(cfg))
     console.print(
-        f"Found [bold]{len(inv.threads)}[/bold] threads in [bold]{len(inv.folders)}[/bold] folders."
+        f"Found [bold]{len(inv.threads)}[/bold] documents in "
+        f"[bold]{len(inv.folders)}[/bold] folders."
     )
 
 
 @app.command()
 def export(
     config: ConfigOpt = Path("config.yml"),
-    incremental: Annotated[bool, typer.Option("--incremental")] = False,
-    force: Annotated[bool, typer.Option("--force")] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Re-download and re-render everything (no resume)")
+    ] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     admin_scope_ok: Annotated[
         bool,
@@ -176,72 +180,73 @@ def export(
     """Export all accessible threads to the vault (runs inventory first)."""
     _banner()
     cfg, settings, state, client, secrets = _bootstrap(config)
-    if dry_run:
-        cfg.safety.dry_run = True
     if no_users:
         cfg.compliance.export_users = False
     if no_permissions:
         cfg.compliance.export_permissions = False
     if redact_emails:
         cfg.compliance.redact_emails = True
-    cache = ThreadCache()  # local disk cache: each document fetched once (hydrate -> export)
-    with client, state:
-        try:
+    if dry_run:
+        with client, state:
             inv = Inventory(cfg, client)
-            console.print("Scanning folders...")
             inv.scan()
-            inv.hydrate_threads(cache=cache)
             inv.persist(state)
             inv.write_manifest(_manifest_dir(cfg))
+        console.print(
+            f"[dry-run] would export {len(inv.threads)} documents in "
+            f"{len(inv.folders)} folders. (No downloads, no files written.)"
+        )
+        return
+    raw = RawStore(Path(cfg.output_dir) / "_raw")  # persistent -> resumable + re-processable
+    with client, state:
+        console.print("Scanning, downloading (API), then rendering locally...")
+        run = run_export(
+            config=cfg,
+            client=client,
+            state=state,
+            secrets=secrets,
+            raw=raw,
+            force=force,
+        )
+        if settings.admin_mode and not dry_run:
+            _admin_export(settings, cfg, run.inventory, admin_scope_ok)
+        write_error_manifest(state, _manifest_dir(cfg))
+        write_summary(state, cfg, _manifest_dir(cfg), admin_used=settings.admin_mode)
+        write_cancellation_checklist(_manifest_dir(cfg))
 
-            console.print("Building link map (pass 1)...")
-            linkmap = LinkMap(cfg)
-            linkmap.build(inv, state)
-
-            console.print(f"Exporting {len(inv.threads)} threads...")
-            exporter = Exporter(cfg, client, state, linkmap, secrets, cache=cache)
-            stats = exporter.export_all(inv, incremental=incremental, force=force)
-
-            if settings.admin_mode and not dry_run:
-                _admin_export(settings, cfg, inv, admin_scope_ok)
-
-            write_error_manifest(state, _manifest_dir(cfg))
-            write_summary(state, cfg, _manifest_dir(cfg), admin_used=settings.admin_mode)
-            write_cancellation_checklist(_manifest_dir(cfg))
-        finally:
-            cache.cleanup()
-
+    s = run.summary()
     console.print(
-        f"\n[green]Done.[/green] exported={stats.exported} skipped={stats.skipped} "
-        f"failed={stats.failed} comments_threads={stats.comments_threads} "
-        f"assets={stats.assets} spreadsheets={stats.spreadsheets} "
-        f"pdfs={stats.pdfs} pdf_failures={stats.pdf_failures}"
+        f"\n[green]Done.[/green] documents={s['documents']} downloaded={s['downloaded']} "
+        f"reused={s['reused']} rendered={s['rendered']} failed={s['failed']} "
+        f"assets={s['assets']} pdfs={s['pdfs']} spreadsheets={s['spreadsheets']}"
     )
     console.print(f"Report: {Path(cfg.output_dir) / cfg.obsidian.manifest_folder_name}")
 
 
 @app.command()
 def resume(config: ConfigOpt = Path("config.yml")) -> None:
-    """Re-run threads left failed or in_progress (incomplete) from a prior run."""
+    """Continue an interrupted export: re-runs the pipeline, which skips already-downloaded
+    and completed documents and finishes the rest (download + render)."""
     _banner()
-    cfg, _settings, state, client, secrets = _bootstrap(config)
+    cfg, settings, state, client, secrets = _bootstrap(config)
+    raw = RawStore(Path(cfg.output_dir) / "_raw")
     with client, state:
-        pending = state.threads_by_status(("failed", "in_progress", "partial", "pending"))
-        if not pending:
-            console.print("Nothing to resume.")
-            return
-        console.print(f"Resuming {len(pending)} thread(s)...")
-        inv = Inventory(cfg, client)
-        inv.scan()
-        inv.hydrate_threads()
-        linkmap = LinkMap(cfg)
-        linkmap.build(inv, state)
-        ids = {row["thread_id"] for row in pending}
-        inv.threads = {tid: t for tid, t in inv.threads.items() if tid in ids}
-        exporter = Exporter(cfg, client, state, linkmap, secrets)
-        stats = exporter.export_all(inv, incremental=False, force=True)
+        console.print("Resuming (skips already-downloaded and completed documents)...")
+        run = run_export(
+            config=cfg,
+            client=client,
+            state=state,
+            secrets=secrets,
+            raw=raw,
+            force=False,
+        )
         write_error_manifest(state, _manifest_dir(cfg))
-    console.print(f"[green]Resume done.[/green] exported={stats.exported} failed={stats.failed}")
+        write_summary(state, cfg, _manifest_dir(cfg), admin_used=settings.admin_mode)
+    s = run.summary()
+    console.print(
+        f"[green]Resume done.[/green] downloaded={s['downloaded']} reused={s['reused']} "
+        f"rendered={s['rendered']} failed={s['failed']}"
+    )
 
 
 @app.command()

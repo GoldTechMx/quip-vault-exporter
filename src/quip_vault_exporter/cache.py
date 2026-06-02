@@ -1,48 +1,89 @@
-"""Disk-backed, single-fetch cache of full thread responses.
+"""Persistent raw store for the resumable download-then-process pipeline.
 
-Shared between the metadata pass (which `put`s each fetched thread) and the export pass
-(which `pop`s it back, then deletes it). This means every document is fetched from Quip
-exactly ONCE per export run, regardless of account size:
+The DOWNLOAD phase writes each document's raw payload here (body, comments, asset index);
+the PROCESS phase reads it back to render the vault WITHOUT touching the Quip API. Living on
+disk under `output_dir/_raw/` (not in RAM) means:
 
-  * stored in a LOCAL temp dir (not RAM, not the possibly-remote/slow output dir), so memory
-    stays O(1) even for 100k+ documents;
-  * best-effort: if a cache file is missing/corrupt, the exporter simply re-fetches that one
-    document, so the cache can never cause data loss.
+  * memory stays O(1) for any account size (100k+ documents);
+  * a crashed/cancelled run RESUMES - already-downloaded documents are not re-fetched;
+  * rendering can be re-run locally (e.g. after a fix) without re-consuming the rate-limited
+    API.
 
-The cached payload is the raw thread response (document HTML + metadata); it contains no
-access token and no signed URLs, and the temp dir is removed when the run finishes.
+Keyed by thread_id (collision-free); the human-facing folder/sub-folder tree is preserved in
+the FINAL vault that the process phase writes. The payload contains workspace content but no
+access token and no signed URLs.
 """
 
 from __future__ import annotations
 
-import contextlib
 import json
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
+from .utils import atomic_write_bytes, atomic_write_json, ensure_dir
 
-class ThreadCache:
-    def __init__(self, root: Path | str | None = None) -> None:
-        self.dir = Path(root) if root else Path(tempfile.mkdtemp(prefix="qve-cache-"))
-        self.dir.mkdir(parents=True, exist_ok=True)
 
-    def put(self, thread_id: str, resp: dict[str, Any]) -> None:
-        # Best-effort; on any write failure the exporter simply re-fetches that document.
-        with contextlib.suppress(OSError):
-            (self.dir / f"{thread_id}.json").write_text(json.dumps(resp), encoding="utf-8")
+class RawStore:
+    def __init__(self, root: Path | str) -> None:
+        self.dir = ensure_dir(Path(root))
 
-    def pop(self, thread_id: str) -> dict[str, Any] | None:
-        f = self.dir / f"{thread_id}.json"
-        if not f.exists():
+    def _p(self, thread_id: str, suffix: str) -> Path:
+        return self.dir / f"{thread_id}.{suffix}"
+
+    def path_for(self, thread_id: str, suffix: str) -> Path:
+        return self._p(thread_id, suffix)
+
+    def has(self, thread_id: str, suffix: str) -> bool:
+        return self._p(thread_id, suffix).exists()
+
+    def put_bytes(self, thread_id: str, suffix: str, data: bytes) -> None:
+        atomic_write_bytes(self._p(thread_id, suffix), data)
+
+    def get_bytes(self, thread_id: str, suffix: str) -> bytes | None:
+        p = self._p(thread_id, suffix)
+        if not p.exists():
             return None
         try:
-            data = json.loads(f.read_text(encoding="utf-8"))
+            return p.read_bytes()
+        except OSError:
+            return None
+
+    def _read(self, path: Path) -> Any:
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            data = None
-        f.unlink(missing_ok=True)
+            return None
+
+    # -- thread body ----------------------------------------------------------------------
+    def has_thread(self, thread_id: str) -> bool:
+        return self._p(thread_id, "json").exists()
+
+    def put_thread(self, thread_id: str, resp: dict[str, Any]) -> None:
+        atomic_write_json(self._p(thread_id, "json"), resp)
+
+    def get_thread(self, thread_id: str) -> dict[str, Any] | None:
+        data = self._read(self._p(thread_id, "json"))
         return data if isinstance(data, dict) else None
 
+    # -- comments -------------------------------------------------------------------------
+    def put_comments(self, thread_id: str, rows: list[dict[str, Any]]) -> None:
+        atomic_write_json(self._p(thread_id, "comments.json"), rows)
+
+    def get_comments(self, thread_id: str) -> list[dict[str, Any]]:
+        data = self._read(self._p(thread_id, "comments.json"))
+        return data if isinstance(data, list) else []
+
+    # -- asset index (blob_id -> {name, vault_path, sha256}) ------------------------------
+    def put_assets_index(self, thread_id: str, index: dict[str, Any]) -> None:
+        atomic_write_json(self._p(thread_id, "assets.json"), index)
+
+    def get_assets_index(self, thread_id: str) -> dict[str, Any]:
+        data = self._read(self._p(thread_id, "assets.json"))
+        return data if isinstance(data, dict) else {}
+
     def cleanup(self) -> None:
+        import shutil
+
         shutil.rmtree(self.dir, ignore_errors=True)

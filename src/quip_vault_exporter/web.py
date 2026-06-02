@@ -24,13 +24,12 @@ from typing import Any
 from pydantic import SecretStr
 
 from . import __version__
-from .cache import ThreadCache
+from .cache import RawStore
 from .config import Config, ExportToggles, Settings
 from .control import Cancelled, Control
-from .exporter import Exporter, ExportStats
 from .inventory import Inventory
-from .linkmap import LinkMap
 from .logging_setup import RedactionFilter, scrub_text
+from .pipeline import run_export
 from .quip_client import QuipClient, QuipError
 from .ratelimit import RateLimiter
 from .reports import (
@@ -58,10 +57,9 @@ _lock = threading.Lock()
 class Job:
     id: str
     command: str
-    status: str = "running"  # running | done | failed
+    status: str = "running"  # running | done | failed | cancelled
     logs: list[str] = field(default_factory=list)
     total: int = 0
-    stats: ExportStats | None = None
     result: dict[str, Any] | None = None
     error: str | None = None
     # live progress
@@ -155,6 +153,28 @@ def _browse(raw: str | None) -> dict[str, Any]:
     }
 
 
+def _check_path(raw: str) -> dict[str, Any]:
+    """Resolve a typed output path and report whether it's usable (for live UI feedback)."""
+    if not raw.strip():
+        return {"ok": False, "abs": "", "msg": "enter a folder path"}
+    p = Path(raw).expanduser()
+    try:
+        p = p.resolve()
+    except OSError:
+        return {"ok": False, "abs": raw, "msg": "invalid path"}
+    exists = p.exists()
+    # Writability of the target if it exists, else of the nearest existing ancestor.
+    probe = p if exists else next((a for a in p.parents if a.exists()), p)
+    writable = os.access(probe, os.W_OK)
+    if not writable:
+        msg = "not writable"
+    elif exists:
+        msg = "exists - writable"
+    else:
+        msg = "will be created"
+    return {"ok": writable, "abs": str(p), "exists": exists, "writable": writable, "msg": msg}
+
+
 def _load_env_token() -> None:
     """At startup, pick up a token already present in .env / the environment so the UI can
     auto-connect without re-pasting it. Validation happens lazily on the first status call."""
@@ -188,12 +208,11 @@ def _build_config(opts: dict[str, Any]) -> Config:
     return cfg
 
 
-def _run_job(job: Job, settings: Settings, cfg: Config, incremental: bool) -> None:
+def _run_job(job: Job, settings: Settings, cfg: Config) -> None:
     global _active
     secrets = settings.secret_values()
     _redaction.set_secrets(secrets)
     job.started = job.phase_started = time.monotonic()
-    cache: ThreadCache | None = None
     try:
         limiter = RateLimiter(
             cfg.limits.requests_per_minute,
@@ -205,56 +224,42 @@ def _run_job(job: Job, settings: Settings, cfg: Config, incremental: bool) -> No
         )
         state = StateDB.open(ensure_dir(Path(cfg.output_dir)))
         mdir = ensure_dir(Path(cfg.output_dir) / cfg.obsidian.manifest_folder_name)
-        if job.command == "export":
-            cache = ThreadCache()
         with client, state:
-            if job.command in ("inventory", "export"):
+            if job.command == "export":
+                raw = RawStore(Path(cfg.output_dir) / "_raw")
+                run = run_export(
+                    config=cfg,
+                    client=client,
+                    state=state,
+                    secrets=secrets,
+                    raw=raw,
+                    force=False,
+                    progress=job.progress,
+                    control=job.control,
+                )
+                write_error_manifest(state, mdir)
+                write_summary(state, cfg, mdir, admin_used=False)
+                write_cancellation_checklist(mdir)
+                job.result = {**run.summary(), "output_dir": str(cfg.output_dir)}
+            elif job.command == "inventory":
                 inv = Inventory(cfg, client)
                 inv.scan(progress=job.progress, control=job.control)
-                inv.hydrate_threads(progress=job.progress, control=job.control, cache=cache)
                 inv.persist(state)
                 inv.write_manifest(mdir)
                 job.total = len(inv.threads)
-                if job.command == "export":
-                    job.progress("linkmap", 0, len(inv.threads), "building link map")
-                    linkmap = LinkMap(cfg)
-                    linkmap.build(inv, state)
-                    exporter = Exporter(cfg, client, state, linkmap, secrets, cache=cache)
-                    job.stats = exporter.stats
-                    exporter.export_all(
-                        inv,
-                        incremental=incremental,
-                        force=False,
-                        progress=job.progress,
-                        control=job.control,
-                    )
-                    write_error_manifest(state, mdir)
-                    write_summary(state, cfg, mdir, admin_used=False)
-                    write_cancellation_checklist(mdir)
-                    job.result = {
-                        "exported": exporter.stats.exported,
-                        "skipped": exporter.stats.skipped,
-                        "failed": exporter.stats.failed,
-                        "assets": exporter.stats.assets,
-                        "comments_threads": exporter.stats.comments_threads,
-                        "output_dir": str(cfg.output_dir),
-                    }
-                else:
-                    job.result = {"threads": len(inv.threads), "folders": len(inv.folders)}
+                job.result = {"threads": len(inv.threads), "folders": len(inv.folders)}
             elif job.command == "verify":
                 job.result = run_verify(state, cfg, mdir)
         job.status = "done"
         log.info("%s complete.", job.command)
     except Cancelled:
         job.status = "cancelled"
-        log.info("%s cancelled by user. Re-run with Incremental to continue.", job.command)
+        log.info("%s cancelled by user. Re-run Export to continue where it left off.", job.command)
     except Exception as exc:  # never crash the server on a job failure
         job.error = scrub_text(str(exc), secrets)
         job.status = "failed"
         log.error("%s failed: %s", job.command, job.error)
     finally:
-        if cache is not None:
-            cache.cleanup()
         with _lock:
             _active = None
 
@@ -276,6 +281,10 @@ def create_app() -> Any:
     @app.get("/api/browse")
     def browse(path: str | None = None) -> JSONResponse:
         return JSONResponse(_browse(path))
+
+    @app.get("/api/check-path")
+    def check_path(path: str = "") -> JSONResponse:
+        return JSONResponse(_check_path(path))
 
     @app.get("/api/status")
     def status() -> JSONResponse:
@@ -346,9 +355,7 @@ def create_app() -> Any:
             _active = job
         settings = _settings()
         cfg = _build_config(body.get("options", {}))
-        threading.Thread(
-            target=_run_job, args=(job, settings, cfg, bool(body.get("incremental"))), daemon=True
-        ).start()
+        threading.Thread(target=_run_job, args=(job, settings, cfg), daemon=True).start()
         return JSONResponse({"job_id": job.id})
 
     @app.post("/api/jobs/{job_id}/{action}")
@@ -371,17 +378,6 @@ def create_app() -> Any:
         job = _jobs.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="No such job.")
-        s = job.stats
-        live = (
-            {
-                "exported": s.exported,
-                "skipped": s.skipped,
-                "failed": s.failed,
-                "assets": s.assets,
-            }
-            if s is not None
-            else None
-        )
         now = time.monotonic()
         elapsed = now - job.started if job.started else 0.0
         # Per-phase ETA: extrapolate from how long the current phase has taken so far.
@@ -401,7 +397,6 @@ def create_app() -> Any:
                 "detail": job.detail,
                 "elapsed": round(elapsed, 1),
                 "eta": None if eta is None else round(eta, 1),
-                "stats": live,
                 "result": job.result,
                 "error": job.error,
                 "logs": job.logs[since:],
@@ -500,7 +495,9 @@ INDEX_HTML = """<!DOCTYPE html>
       <div style="display:flex;gap:8px">
         <input id="out" type="text" value="./exports/quip-vault">
         <button id="browse" class="ghost" type="button" style="white-space:nowrap">Browse…</button>
-      </div></div></div>
+      </div>
+      <div id="outinfo" class="muted" style="margin-top:6px">Paste a full path, or use Browse. Files are written here in the Export phase.</div>
+    </div></div>
     <div id="picker" class="picker" hidden>
       <div class="pkbar"><span id="pkpath" class="muted"></span><span id="pkwrite" class="muted"></span></div>
       <div id="pkdirs" class="pkdirs"></div>
@@ -518,7 +515,6 @@ INDEX_HTML = """<!DOCTYPE html>
       <label class="chk"><input type="checkbox" class="opt" data-k="attachments" checked> Attachments</label>
       <label class="chk"><input type="checkbox" class="opt" data-k="spreadsheets" checked> Spreadsheets</label>
       <label class="chk"><input type="checkbox" class="opt" data-k="pdf"> PDF (slow)</label>
-      <label class="chk"><input type="checkbox" id="incremental"> Incremental</label>
     </div>
   </section>
 
@@ -564,7 +560,7 @@ function showControls(on){$('#btnPause').hidden=!on;$('#btnCancel').hidden=!on;i
 function run(cmd){return async()=>{if(!connected)return;shown=0;$('#log').textContent='';$('#summary').textContent='';
   $('#bar').style.width='0';$('#jdot').className='dot run';$('#jstat').textContent=cmd+' starting…';
   ['#btnInv','#btnExp','#btnVer'].forEach(s=>$(s).disabled=true);
-  try{const {job_id}=await api('/api/run',{command:cmd,options:options(),incremental:$('#incremental').checked});
+  try{const {job_id}=await api('/api/run',{command:cmd,options:options()});
     curJob=job_id;showControls(true);poll=setInterval(()=>track(job_id),700);}
   catch(e){$('#jstat').textContent=e.message;$('#jdot').className='dot err';
     ['#btnInv','#btnExp','#btnVer'].forEach(s=>$(s).disabled=!connected);}};}
@@ -573,7 +569,7 @@ $('#btnPause').onclick=async()=>{if(!curJob)return;const resuming=$('#btnPause')
 $('#btnCancel').onclick=async()=>{if(!curJob)return;$('#btnCancel').disabled=true;try{await api('/api/jobs/'+curJob+'/cancel',{});}catch(e){}};
 
 function fmt(s){if(s==null)return '?';s=Math.round(s);if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m '+(s%60)+'s';return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m';}
-const PH={starting:'Starting',scan:'Scanning folders',metadata:'Reading documents',linkmap:'Building links',export:'Exporting'};
+const PH={starting:'Starting',scan:'Scanning folders',download:'Downloading from Quip',linkmap:'Building links',process:'Writing vault'};
 async function track(id){try{const j=await api('/api/jobs/'+id+'?since='+shown);
   if(j.logs&&j.logs.length){$('#log').textContent+=j.logs.join('\\n')+'\\n';shown=j.log_count;$('#log').scrollTop=$('#log').scrollHeight;}
   const pct=j.total?Math.min(100,Math.round(100*j.done/j.total)):0;$('#bar').style.width=pct+'%';
@@ -588,7 +584,7 @@ async function track(id){try{const j=await api('/api/jobs/'+id+'?since='+shown);
     if(j.status==='done'){$('#jdot').className='dot ok';$('#jstat').textContent=j.command+' done · '+fmt(j.elapsed);$('#bar').style.width='100%';
       $('#summary').textContent=JSON.stringify(j.result);}
     else if(j.status==='cancelled'){$('#jdot').className='dot';$('#jstat').textContent=j.command+' cancelled';
-      $('#summary').textContent='Cancelled. Re-run Export with “Incremental” checked to continue where it left off.';}
+      $('#summary').textContent='Cancelled. Re-run Export to continue where it left off (already-downloaded docs are skipped).';}
     else{$('#jdot').className='dot err';$('#jstat').textContent=j.command+' failed';$('#summary').textContent=j.error||'';}}
 }catch(e){clearInterval(poll);$('#jstat').textContent=e.message;$('#jdot').className='dot err';}}
 
@@ -601,10 +597,18 @@ function renderPicker(d){pkPath=d.path;$('#pkpath').textContent=d.path;
   if(d.parent){const up=document.createElement('div');up.className='pkdir';up.textContent='⬆  ..';up.onclick=()=>nav(d.parent);box.appendChild(up);}
   d.dirs.forEach(x=>{const el=document.createElement('div');el.className='pkdir';el.textContent='📁  '+x.name;el.onclick=()=>nav(x.path);box.appendChild(el);});
   if(!d.dirs.length){const e=document.createElement('div');e.className='muted';e.style.padding='6px 8px';e.textContent='(no subfolders here)';box.appendChild(e);}}
+// live feedback for the typed/pasted output path
+let outTimer=null;
+async function checkOut(){const v=$('#out').value;if(!v.trim()){$('#outinfo').textContent='';return;}
+  try{const d=await api('/api/check-path?path='+encodeURIComponent(v));
+    $('#outinfo').innerHTML=(d.ok?'✓ ':'✗ ')+d.abs+' · '+d.msg;
+    $('#outinfo').style.color=d.ok?'var(--ok)':'var(--err)';}catch(e){}}
+$('#out').addEventListener('input',()=>{clearTimeout(outTimer);outTimer=setTimeout(checkOut,400);});
+checkOut();
 $('#browse').onclick=()=>{$('#picker').hidden=false;nav($('#out').value);};
 $('#pkcancel').onclick=()=>$('#picker').hidden=true;
 $('#pkuse').onclick=()=>{let p=pkPath;const nw=$('#pknew').value.trim();if(nw)p=p.replace(/[\\\\/]+$/,'')+'/'+nw;
-  $('#out').value=p;$('#pknew').value='';$('#picker').hidden=true;};
+  $('#out').value=p;$('#pknew').value='';$('#picker').hidden=true;checkOut();};
 
 $('#btnInv').onclick=run('inventory');$('#btnExp').onclick=run('export');$('#btnVer').onclick=run('verify');
 api('/api/status').then(j=>{if(j.connected){$('#base').value=j.base_url;setConn(true,j.user);

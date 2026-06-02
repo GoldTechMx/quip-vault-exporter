@@ -21,6 +21,7 @@ import mimetypes
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from .config import Config
 from .logging_setup import scrub_text
@@ -46,6 +47,25 @@ class AssetRef:
     name: str
     vault_path: str  # vault-root-relative POSIX path, e.g. _assets/THREAD/image.png
     sha256: str
+
+
+def index_from_map(asset_map: dict[str, AssetRef]) -> dict[str, dict[str, str]]:
+    """Serialize an asset map to a plain dict for the raw store (download -> process)."""
+    return {
+        bid: {"name": r.name, "vault_path": r.vault_path, "sha256": r.sha256}
+        for bid, r in asset_map.items()
+    }
+
+
+def map_from_index(index: dict[str, Any]) -> dict[str, AssetRef]:
+    """Reconstruct an asset map from a stored index (process phase, no API)."""
+    out: dict[str, AssetRef] = {}
+    for bid, d in index.items():
+        if isinstance(d, dict):
+            out[bid] = AssetRef(
+                bid, d.get("name", ""), d.get("vault_path", ""), d.get("sha256", "")
+            )
+    return out
 
 
 def discover_blob_ids(html: str) -> list[tuple[str, str]]:

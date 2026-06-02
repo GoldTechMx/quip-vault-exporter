@@ -1,9 +1,9 @@
-"""Spreadsheet export (Phase 3).
+"""Spreadsheet rendering.
 
-Quip spreadsheets export as XLSX via the API. **CSV is NOT a native Quip export** - it is
-derived locally from the XLSX with openpyxl. When a spreadsheet can't be represented as
-Markdown, we still write a Markdown wrapper note that links to the external files, so the
-spreadsheet has a first-class presence in the Obsidian vault.
+Quip spreadsheets export as XLSX via the API (fetched in the DOWNLOAD phase). **CSV is NOT a
+native Quip export** - it is derived locally from the XLSX with openpyxl here in the PROCESS
+phase. When a spreadsheet can't be represented as Markdown, a Markdown wrapper note links to
+the external files so the spreadsheet has a first-class presence in the Obsidian vault.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import io
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from openpyxl import load_workbook
 
@@ -45,25 +44,19 @@ def xlsx_to_csv(data: bytes) -> str:
     return buf.getvalue()
 
 
-def export_spreadsheet(
+def render_spreadsheet(
     *,
-    client: Any,
+    xlsx: bytes,
     thread_id: str,
     title: str,
     stem: str,
     folder_dir: Path,
     config: Config,
 ) -> SpreadsheetResult:
-    """Export a spreadsheet thread to XLSX + derived CSV, plus a Markdown wrapper note."""
+    """LOCAL render of a previously-downloaded XLSX: write XLSX + derived CSV + wrapper note."""
     files: list[str] = []
-    try:
-        xlsx = client.export_xlsx(thread_id)
-    except Exception as exc:
-        return SpreadsheetResult("failed", error=f"xlsx export failed: {exc}")
-
     atomic_write_bytes(folder_dir / f"{stem}.xlsx", xlsx)
     files.append(f"{stem}.xlsx")
-
     try:
         csv_text = xlsx_to_csv(xlsx)
         atomic_write_text(folder_dir / f"{stem}.csv", csv_text)
@@ -75,7 +68,6 @@ def export_spreadsheet(
     if config.export.markdown:
         wrapper = _wrapper_markdown(title, thread_id, files)
         atomic_write_text(folder_dir / f"{stem}.md", wrapper)
-
     return SpreadsheetResult("complete", files=files, markdown=wrapper)
 
 

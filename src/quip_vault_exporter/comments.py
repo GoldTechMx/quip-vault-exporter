@@ -1,37 +1,36 @@
-"""Comment/message export with FULL pagination.
+"""Comment/message handling, split for the download-then-process pipeline.
 
-The original spec's "25 most recent" claim is wrong - see CLAUDE.md. This module walks the
-entire message history via QuipClient.paginate_messages and records the true total in state,
-so the manifest can honestly report completeness instead of silently truncating.
+`fetch_comments` (DOWNLOAD phase, API): walks the FULL message history via
+QuipClient.paginate_messages (the "25 most recent" claim is wrong - see CLAUDE.md) and
+returns token-scrubbed rows to store in the raw store.
+
+`render_comments_markdown` (PROCESS phase, local): turns stored rows into readable Markdown.
+No API.
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from .logging_setup import scrub_text
-from .obsidian import now_iso
 from .quip_client import QuipClient
-from .utils import atomic_write_json, atomic_write_text, usec_to_iso
+from .utils import usec_to_iso
 
 log = logging.getLogger("quip_vault_exporter.comments")
 
 
-def export_comments(
+def fetch_comments(
     *,
     client: QuipClient,
     thread_id: str,
-    title: str,
-    comments_dir: Path,
     user_names: dict[str, str] | None = None,
     secrets: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Export all messages for a thread as JSON + readable Markdown.
+    """Fetch all messages for a thread (full pagination). Returns rows + truncation flag.
 
-    Returns {"count": int, "truncated": bool}. `truncated` stays False unless pagination
-    was cut short by an error - a real signal for the manifest, not a guess.
+    `truncated` stays False unless pagination was cut short by an error - a real signal for
+    the manifest, not a guess.
     """
     user_names = user_names or {}
     secrets = secrets or []
@@ -44,7 +43,7 @@ def export_comments(
         truncated = True
         log.warning("Comment pagination cut short for %s: %s", thread_id, exc)
 
-    json_rows = [
+    rows = [
         {
             "id": m.get("id"),
             "author": user_names.get(m.get("author_id", ""), m.get("author_id")),
@@ -54,13 +53,10 @@ def export_comments(
         }
         for m in messages
     ]
-    atomic_write_json(comments_dir / f"{title}.comments.json", json_rows)
-    atomic_write_text(comments_dir / f"{title}.comments.md", _render_markdown(title, json_rows))
-
-    return {"count": len(messages), "truncated": truncated, "exported_at": now_iso()}
+    return {"rows": rows, "count": len(messages), "truncated": truncated}
 
 
-def _render_markdown(title: str, rows: list[dict[str, Any]]) -> str:
+def render_comments_markdown(title: str, rows: list[dict[str, Any]]) -> str:
     lines = [f"# Comments for {title}", ""]
     lines.append(f"> {len(rows)} message(s) exported via full API pagination.")
     lines.append("")

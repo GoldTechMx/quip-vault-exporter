@@ -8,12 +8,15 @@ map. The map must include every exportable thread - even ones skipped on an incr
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from .config import Config
 from .inventory import Inventory
 from .sanitize import disambiguate, sanitize_filename
 from .state import StateDB
+
+log = logging.getLogger("quip_vault_exporter.linkmap")
 
 
 class LinkMap:
@@ -23,6 +26,10 @@ class LinkMap:
 
     def build(self, inventory: Inventory, state: StateDB) -> dict[str, dict[str, str]]:
         naming = self._config.naming
+        log.info(
+            "PHASE 3/4 - LINK MAP: resolving paths + wikilinks for %d documents (no API).",
+            len(inventory.threads),
+        )
         used_stems: dict[str, str] = {}  # (folder_path/stem) -> thread_id
 
         # Iterate in a STABLE order (by thread_id) so collision disambiguation is

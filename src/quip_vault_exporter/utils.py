@@ -31,6 +31,32 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
+def measure_write_speed(directory: Path, sample_mb: int = 4) -> float:
+    """Write a sample file to `directory` and return throughput in MB/s (best-effort).
+
+    Used to warn when the output dir is a slow network share (a common bottleneck), since the
+    vault is written there. Returns 0.0 on failure (treated as 'unknown').
+    """
+    import time as _t
+
+    ensure_dir(directory)
+    data = b"\0" * (sample_mb * 1024 * 1024)
+    tmp = directory / ".qve_write_test.tmp"
+    try:
+        start = _t.monotonic()
+        with open(tmp, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        elapsed = _t.monotonic() - start
+    except OSError:
+        return 0.0
+    finally:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+    return (sample_mb / elapsed) if elapsed > 0 else 0.0
+
+
 class PathTraversalError(Exception):
     """Raised when a derived path would escape the output root."""
 

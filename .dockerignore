@@ -16,6 +16,7 @@ exports/
 **/*.raw.json
 **/_assets/
 **/_manifest/
+**/_raw/
 
 # Python build/test caches and virtualenvs
 __pycache__/

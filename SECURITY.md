@@ -25,6 +25,10 @@ workspace content, and - in admin mode - personal data). The design enforces:
   under `output_dir` via a resolved-path check (anti zip-slip).
 - **Admin scope is gated.** Org/admin export requires a separate `QUIP_ADMIN_TOKEN` (never
   falls back to the personal token) and the explicit `--i-understand-admin-scope` flag.
+- **Raw store at rest.** The resumable pipeline stages each document under
+  `output_dir/_raw/` (document bodies, comments, asset/PDF/XLSX payloads). It contains
+  workspace content but no access token and no signed URLs, is `.gitignore`d/`.dockerignore`d,
+  and lives alongside the (equally sensitive) vault - protect the whole `output_dir`.
 
 ## Operator responsibilities (the export is sensitive at rest)
 

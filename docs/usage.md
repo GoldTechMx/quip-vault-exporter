@@ -16,16 +16,15 @@ quip-vault-exporter init   # writes config.yml from the example
 |---|---|
 | `init` | Create `config.yml` and `.env` from the bundled examples. |
 | `inventory` | Scan folders/threads; write `_manifest/inventory.{json,csv}`, `folders.json`, `export_plan.md`. |
-| `export` | Run inventory, build the link map (pass 1), then render every thread (pass 2). |
+| `export` | Run the four-phase pipeline: scan, download (resumable), build the link map, render the vault. |
 | `verify` | Compare state vs export; write `_manifest/verification_report.md`. |
 | `report` | (Re)write `_manifest/export_summary.md`. |
-| `resume` | Re-run threads left `failed`/`in_progress`. |
+| `resume` | Continue an interrupted export (skips already-downloaded/completed documents). |
 
 ## Useful flags
 ```bash
-quip-vault-exporter export --dry-run        # write nothing; preview the plan
-quip-vault-exporter export --incremental    # skip threads whose updated_usec is unchanged
-quip-vault-exporter export --incremental --force   # re-export everything anyway
+quip-vault-exporter export --dry-run   # write nothing; scan only and preview the plan
+quip-vault-exporter export --force     # re-download and re-render everything (ignore prior state)
 quip-vault-exporter export -c path/to/config.yml
 ```
 
@@ -58,10 +57,14 @@ exports/quip-vault/
 ├─ _manifest/{inventory,folders,errors}.{json,csv}
 ├─ _manifest/{verification_report,export_summary,cancellation_checklist}.md
 ├─ _manifest/{organization.json,users.csv,permissions.csv}   # admin mode only
-└─ _quip_export_state.sqlite                    # incremental/resume state
+├─ _raw/                                        # staged downloads (resume cache)
+└─ _quip_export_state.sqlite                    # resume state (per-document)
 ```
 
-## Incremental & resume
-State lives in `_quip_export_state.sqlite`. `--incremental` skips threads whose
-`updated_usec` hasn't advanced since the last complete export. `resume` redoes anything left
-`in_progress` (treated as an incomplete crash) or `failed`.
+## Resume & re-run
+Every download is staged per document under `_raw/` and recorded in
+`_quip_export_state.sqlite`. A crashed, cancelled, or interrupted run continues where it left
+off: re-run `export` (or `resume`) and already-downloaded/completed documents are skipped, so
+the rate-limited API work is never repeated. Because rendering is local, the vault can be
+re-built from `_raw/` without re-downloading. Use `--force` to ignore prior state and
+re-download + re-render everything.

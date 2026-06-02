@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .cache import ThreadCache
 from .config import Config
 from .control import Control
 from .quip_client import QuipClient
@@ -90,7 +89,11 @@ class Inventory:
 
     def scan(self, progress: Progress | None = None, control: Control | None = None) -> None:
         roots = self.discover_root_folder_ids()
-        log.info("Discovered %d root folder(s); walking the folder tree...", len(roots))
+        log.info(
+            "PHASE 1/4 - SCAN: building the folder tree from %d root folder(s), preserving "
+            "Quip's structure. (The vault is written later, in the PROCESS phase.)",
+            len(roots),
+        )
         self._folders_scanned = 0
         if progress is not None:
             progress("scan", 0, None, "walking folder tree")  # show the phase immediately
@@ -175,43 +178,25 @@ class Inventory:
         if folder_id not in entry.parent_folder_ids:
             entry.parent_folder_ids.append(folder_id)
 
-    def hydrate_threads(
-        self,
-        progress: Progress | None = None,
-        control: Control | None = None,
-        cache: ThreadCache | None = None,
-    ) -> None:
-        """Fetch per-thread metadata (title/type/timestamps) for the inventory + link map.
+    def hydrate_from_state(self, state: StateDB) -> None:
+        """Restore titles/type/updated_usec from prior runs (resume/incremental).
 
-        When a `cache` is given, each full response is written to a local disk cache so the
-        export phase reuses it (single fetch per document, O(1) memory, any account size).
-        Emits progress every 10 documents.
+        The scan only knows folder structure + ids, not titles. On a resumed run the download
+        phase skips already-downloaded documents, so without this their in-memory title would
+        stay empty and the link map would render them as `Untitled-<id>.md` with broken
+        cross-run wikilinks. Pull the persisted values back into the in-memory entries.
         """
-        total = len(self.threads)
-        log.info("Fetching metadata for %d documents...", total)
-        if progress is not None:
-            progress("metadata", 0, total, "reading documents")  # show the phase immediately
-        for i, (tid, entry) in enumerate(self.threads.items(), 1):
-            if control is not None:
-                control.checkpoint()
-            try:
-                resp = self._client.get_thread(tid)
-            except Exception as exc:
-                log.warning("Failed to hydrate thread %s: %s", tid, exc)
+        rows = state.all_threads_map()  # one scan, not one query per document
+        for tid, entry in self.threads.items():
+            row = rows.get(tid)
+            if not row:
                 continue
-            if cache is not None:
-                cache.put(tid, resp)
-            thread = resp.get("thread", {})
-            entry.title = thread.get("title") or entry.title or "Untitled"
-            entry.type = thread.get("type", entry.type)
-            entry.updated_usec = thread.get("updated_usec")
-            entry.created_usec = thread.get("created_usec")
-            entry.author_id = thread.get("author_id")
-            entry.link = thread.get("link")
-            if i % 10 == 0 or i == total:
-                log.info("Metadata: %d/%d documents", i, total)
-                if progress is not None:
-                    progress("metadata", i, total, "")
+            if not entry.title and row.get("title"):
+                entry.title = row["title"]
+            if row.get("type"):
+                entry.type = row["type"]
+            if entry.updated_usec is None and row.get("updated_usec") is not None:
+                entry.updated_usec = row["updated_usec"]
 
     # -- canonicalization -----------------------------------------------------------------
     def _canonicalize_paths(self) -> None:
