@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quip-vault-exporter"
+version = "0.1.0"
+description = "Read-only CLI that exports a Quip workspace into a local, Obsidian-ready Markdown vault."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "GoldTech MX", email = "" }]
+keywords = ["quip", "obsidian", "export", "backup", "migration", "markdown"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+
+dependencies = [
+    "typer>=0.12",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "beautifulsoup4>=4.12",
+    "markdownify>=0.13",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+dev = [
+    "pytest>=8.2",
+    "pytest-httpx>=0.30",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "types-PyYAML>=6.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.scripts]
+quip-vault-exporter = "quip_vault_exporter.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/GoldTechMx/quip-vault-exporter"
+Issues = "https://github.com/GoldTechMx/quip-vault-exporter/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quip_vault_exporter"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "C4", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# web.py embeds a single-page HTML/CSS/JS template as a string literal; its lines are not
+# wrappable. The Python code in the file still respects the line length.
+"src/quip_vault_exporter/web.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+# markdownify dispatches convert_<tag> methods dynamically, so mypy can't resolve them in
+# the superclass when we override convert_li / convert_pre. Scope the relaxation tightly.
+[[tool.mypy.overrides]]
+module = "quip_vault_exporter.converter"
+disable_error_code = ["misc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

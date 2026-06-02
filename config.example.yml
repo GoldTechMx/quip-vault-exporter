@@ -1,0 +1,66 @@
+# Quip Vault Exporter — configuration (NO TOKENS HERE; tokens live in .env only)
+workspace_name: "Company Quip Archive"
+output_dir: "./exports/quip-vault"
+obsidian_mode: true
+
+export:
+  markdown: true
+  html: true
+  pdf: false          # Phase 3. Async render; ~10 min for large docs.
+  json_raw: true
+  comments: true      # Phase 2. Full history via pagination (NOT capped at 25).
+  attachments: true   # Phase 2.
+  spreadsheets: true  # Phase 3. XLSX/PDF/HTML/JSON; CSV derived locally.
+
+folders:
+  include_starred_root: true
+  include_shared_folders: true
+  include_archived: false
+  # Optional explicit entry points. If empty, discovery uses the authenticated user's
+  # private/shared/starred folders.
+  root_folder_ids: []
+    # - "abc123"
+    # - "def456"
+
+naming:
+  sanitize_filenames: true
+  prefix_with_modified_date: false
+  # Disambiguation when titles collide (titles are NOT globally unique):
+  # append_thread_id -> "<sanitized-title>-<short_thread_id>.md"
+  handle_duplicates: "append_thread_id"
+  max_filename_length: 180
+
+obsidian:
+  wikilinks: true
+  # Prefer path/aliased wikilinks so disambiguated files stay addressable:
+  # [[folder/relative/path|Title]] rather than bare [[Title]].
+  path_aliased_links: true
+  yaml_frontmatter: true
+  assets_folder_name: "_assets"
+  comments_folder_name: "_comments"
+  manifest_folder_name: "_manifest"
+  unfiled_folder_name: "_unfiled"   # canonical home for orphan (folderless) threads
+
+limits:
+  # Quip ceilings per token: 50/min AND 750/hour; 600/min company-wide. The HOURLY budget
+  # is the real constraint for large accounts. Throttling is HTTP 503 (not 429); Quip sends
+  # NO Retry-After, so the client backs off using the X-Ratelimit-Reset epoch header and
+  # adapts proactively from X-Ratelimit-Remaining on every response.
+  requests_per_minute: 50
+  requests_per_hour: 750
+  company_requests_per_minute: 600
+  retry_count: 5
+  retry_backoff_seconds: 3   # fallback only; header-driven timing takes precedence
+  # Async PDF export (a large document can take up to ~10 minutes).
+  pdf_poll_seconds: 15
+  pdf_timeout_seconds: 600
+
+safety:
+  dry_run: false
+  overwrite_existing: false
+  preserve_raw_api_responses: true   # raw bodies/URLs are scrubbed of tokens before write
+
+compliance:
+  redact_emails: false
+  export_users: true          # PII — opt-out with --no-users
+  export_permissions: true    # PII — opt-out with --no-permissions

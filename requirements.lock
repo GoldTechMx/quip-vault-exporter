@@ -1,0 +1,32 @@
+# Pinned runtime dependencies for reproducible production builds.
+# Generated from a clean install of this package's runtime deps (no dev/test tooling).
+# Regenerate with:  python -m venv .lockenv && .lockenv/bin/pip install . && \
+#                    .lockenv/bin/pip freeze --exclude-editable > requirements.lock
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.13.0
+beautifulsoup4==4.14.3
+certifi==2026.5.20
+colorama==0.4.6
+et_xmlfile==2.0.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.17
+markdown-it-py==4.2.0
+markdownify==1.2.2
+mdurl==0.1.2
+openpyxl==3.1.5
+pydantic==2.13.4
+pydantic-settings==2.14.1
+pydantic_core==2.46.4
+Pygments==2.20.0
+python-dotenv==1.2.2
+PyYAML==6.0.3
+rich==15.0.0
+shellingham==1.5.4
+six==1.17.0
+soupsieve==2.8.4
+typer==0.26.5
+typing-inspection==0.4.2
+typing_extensions==4.15.0

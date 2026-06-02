@@ -1,0 +1,45 @@
+# Keep the build context (and final image) lean and free of secrets/artifacts.
+.git
+.github
+.gitignore
+.dockerignore
+
+# Secrets & local config — NEVER ship these in an image
+.env
+.env.*
+!.env.example
+config.yml
+
+# Export output, state, and PII — must never land in an image layer
+exports/
+**/_quip_export_state.sqlite*
+**/*.raw.json
+**/_assets/
+**/_manifest/
+
+# Python build/test caches and virtualenvs
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.lockenv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Tests and docs are not needed at runtime
+tests/
+docs/
+*.md
+!README.md
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

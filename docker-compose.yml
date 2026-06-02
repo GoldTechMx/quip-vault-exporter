@@ -1,0 +1,38 @@
+# Production usage:
+#   1. cp .env.example .env   &&   edit .env  (set QUIP_ACCESS_TOKEN, QUIP_BASE_URL)
+#   2. cp config.example.yml config.yml  (set output_dir to ./exports inside the container)
+#   3. docker compose run --rm exporter inventory
+#      docker compose run --rm exporter export
+#      docker compose run --rm exporter verify
+#
+# This is a batch tool: each `run` performs one command and exits (no long-running service,
+# so no restart policy). The vault and SQLite state persist on the host via the volume.
+services:
+  exporter:
+    build:
+      context: .
+      target: base          # use `full` for the Pandoc-enabled image
+    image: quip-vault-exporter:latest
+    env_file:
+      - .env
+    volumes:
+      - ./exports:/app/exports
+      - ./config.yml:/app/config.yml:ro
+    # Default command; override per run, e.g. `docker compose run --rm exporter inventory`.
+    command: ["export", "--config", "/app/config.yml"]
+
+  # Optional local web UI:  docker compose --profile web up web
+  # then open http://127.0.0.1:8000  (published to localhost only — front with your own auth
+  # before exposing beyond your machine).
+  web:
+    profiles: ["web"]
+    build:
+      context: .
+      target: web
+    image: quip-vault-exporter-web:latest
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./exports:/app/exports

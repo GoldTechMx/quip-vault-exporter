@@ -1,0 +1,43 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+CLAUDE.md
+
+# Export output & state (may contain workspace content + PII)
+exports/
+**/_quip_export_state.sqlite*
+**/*.raw.json
+**/_assets/
+**/_manifest/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Tests & local dev support — not required to USE the tool, kept out of the published repo
+tests/
+conftest.py
+.lockenv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.vs/
+*.user
+*.suo

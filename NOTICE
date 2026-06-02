@@ -1,0 +1,17 @@
+Quip Vault Exporter
+Copyright 2026 GoldTech MX (https://goldtech.mx)
+
+Licensed under the Apache License, Version 2.0.
+
+------------------------------------------------------------------------------
+Third-party notices
+------------------------------------------------------------------------------
+
+Pandoc (optional, high-fidelity Markdown backend) is licensed under the GPL.
+This project invokes Pandoc only as an external binary (subprocess) and does
+not link against or import its code. Using Pandoc as an external tool does not
+impose GPL terms on this project. Pandoc is NOT bundled; it is an optional
+runtime dependency the operator installs separately.
+
+This tool is unaffiliated with and not endorsed by Quip or Salesforce. "Quip"
+is a trademark of Salesforce, Inc., used here only to describe interoperability.
