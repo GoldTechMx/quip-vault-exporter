@@ -18,8 +18,10 @@ Obsidian-ready Markdown vault with an audit manifest.
   `.env`), binds to localhost by default. Install with the `[web]` extra.
 - **Progress + ETA** for every phase (scanning, reading documents, exporting) in both the
   CLI logs and the web UI, so large exports report how much is left.
-- **Double-fetch eliminated**: thread bodies fetched during metadata are reused at export
-  time (bounded cache), roughly halving the API calls / time on large accounts.
+- **Double-fetch eliminated at any scale**: thread bodies fetched during the metadata pass
+  are written to a local disk cache and reused at export time, so every document is fetched
+  from Quip exactly once per run (O(1) memory, works for 100k+ docs) - roughly halving the
+  API calls / time on large accounts.
 - Rate-limit auto-pauses are now **logged/surfaced** ("auto-pausing ~Ns until reset") so a
   long wait near the limit no longer looks frozen.
 - **Read-only Quip client** with a fail-closed method+endpoint allowlist.

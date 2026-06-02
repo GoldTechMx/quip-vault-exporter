@@ -24,6 +24,7 @@ from typing import Any
 from pydantic import SecretStr
 
 from . import __version__
+from .cache import ThreadCache
 from .config import Config, ExportToggles, Settings
 from .control import Cancelled, Control
 from .exporter import Exporter, ExportStats
@@ -192,6 +193,7 @@ def _run_job(job: Job, settings: Settings, cfg: Config, incremental: bool) -> No
     secrets = settings.secret_values()
     _redaction.set_secrets(secrets)
     job.started = job.phase_started = time.monotonic()
+    cache: ThreadCache | None = None
     try:
         limiter = RateLimiter(
             cfg.limits.requests_per_minute,
@@ -203,11 +205,13 @@ def _run_job(job: Job, settings: Settings, cfg: Config, incremental: bool) -> No
         )
         state = StateDB.open(ensure_dir(Path(cfg.output_dir)))
         mdir = ensure_dir(Path(cfg.output_dir) / cfg.obsidian.manifest_folder_name)
+        if job.command == "export":
+            cache = ThreadCache()
         with client, state:
             if job.command in ("inventory", "export"):
                 inv = Inventory(cfg, client)
                 inv.scan(progress=job.progress, control=job.control)
-                inv.hydrate_threads(progress=job.progress, control=job.control)
+                inv.hydrate_threads(progress=job.progress, control=job.control, cache=cache)
                 inv.persist(state)
                 inv.write_manifest(mdir)
                 job.total = len(inv.threads)
@@ -215,9 +219,7 @@ def _run_job(job: Job, settings: Settings, cfg: Config, incremental: bool) -> No
                     job.progress("linkmap", 0, len(inv.threads), "building link map")
                     linkmap = LinkMap(cfg)
                     linkmap.build(inv, state)
-                    exporter = Exporter(
-                        cfg, client, state, linkmap, secrets, thread_cache=inv.thread_cache
-                    )
+                    exporter = Exporter(cfg, client, state, linkmap, secrets, cache=cache)
                     job.stats = exporter.stats
                     exporter.export_all(
                         inv,
@@ -251,6 +253,8 @@ def _run_job(job: Job, settings: Settings, cfg: Config, incremental: bool) -> No
         job.status = "failed"
         log.error("%s failed: %s", job.command, job.error)
     finally:
+        if cache is not None:
+            cache.cleanup()
         with _lock:
             _active = None
 

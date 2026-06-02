@@ -16,6 +16,7 @@ import typer
 from rich.console import Console
 
 from . import EOL_NOTICE, __version__
+from .cache import ThreadCache
 from .config import Config, ConfigError, Settings
 from .exporter import Exporter
 from .inventory import Inventory
@@ -183,28 +184,32 @@ def export(
         cfg.compliance.export_permissions = False
     if redact_emails:
         cfg.compliance.redact_emails = True
+    cache = ThreadCache()  # local disk cache: each document fetched once (hydrate -> export)
     with client, state:
-        inv = Inventory(cfg, client)
-        console.print("Scanning folders...")
-        inv.scan()
-        inv.hydrate_threads()
-        inv.persist(state)
-        inv.write_manifest(_manifest_dir(cfg))
+        try:
+            inv = Inventory(cfg, client)
+            console.print("Scanning folders...")
+            inv.scan()
+            inv.hydrate_threads(cache=cache)
+            inv.persist(state)
+            inv.write_manifest(_manifest_dir(cfg))
 
-        console.print("Building link map (pass 1)...")
-        linkmap = LinkMap(cfg)
-        linkmap.build(inv, state)
+            console.print("Building link map (pass 1)...")
+            linkmap = LinkMap(cfg)
+            linkmap.build(inv, state)
 
-        console.print(f"Exporting {len(inv.threads)} threads...")
-        exporter = Exporter(cfg, client, state, linkmap, secrets, thread_cache=inv.thread_cache)
-        stats = exporter.export_all(inv, incremental=incremental, force=force)
+            console.print(f"Exporting {len(inv.threads)} threads...")
+            exporter = Exporter(cfg, client, state, linkmap, secrets, cache=cache)
+            stats = exporter.export_all(inv, incremental=incremental, force=force)
 
-        if settings.admin_mode and not dry_run:
-            _admin_export(settings, cfg, inv, admin_scope_ok)
+            if settings.admin_mode and not dry_run:
+                _admin_export(settings, cfg, inv, admin_scope_ok)
 
-        write_error_manifest(state, _manifest_dir(cfg))
-        write_summary(state, cfg, _manifest_dir(cfg), admin_used=settings.admin_mode)
-        write_cancellation_checklist(_manifest_dir(cfg))
+            write_error_manifest(state, _manifest_dir(cfg))
+            write_summary(state, cfg, _manifest_dir(cfg), admin_used=settings.admin_mode)
+            write_cancellation_checklist(_manifest_dir(cfg))
+        finally:
+            cache.cleanup()
 
     console.print(
         f"\n[green]Done.[/green] exported={stats.exported} skipped={stats.skipped} "

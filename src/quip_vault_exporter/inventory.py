@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .cache import ThreadCache
 from .config import Config
 from .control import Control
 from .quip_client import QuipClient
@@ -51,11 +52,6 @@ class FolderEntry:
     member_ids: list[str] = field(default_factory=list)  # for permission reporting (Phase 4)
 
 
-# Cap on caching full thread bodies between hydrate and export (to bound memory on huge
-# accounts). Below this, export reuses the hydrate fetch (no double-fetch); above it, export
-# re-fetches to keep memory in check.
-_THREAD_CACHE_CAP = 8000
-
 # progress(phase, done, total_or_None, detail)
 Progress = Callable[[str, int, int | None, str], None]
 
@@ -66,9 +62,6 @@ class Inventory:
         self._client = client
         self.threads: dict[str, ThreadEntry] = {}
         self.folders: dict[str, FolderEntry] = {}
-        # Full thread responses captured during hydrate, reused by the exporter (popped as it
-        # goes) so each thread is fetched ONCE instead of twice. Bounded by _THREAD_CACHE_CAP.
-        self.thread_cache: dict[str, dict[str, Any]] = {}
         self._folders_scanned = 0
 
     # -- discovery ------------------------------------------------------------------------
@@ -183,21 +176,18 @@ class Inventory:
             entry.parent_folder_ids.append(folder_id)
 
     def hydrate_threads(
-        self, progress: Progress | None = None, control: Control | None = None
+        self,
+        progress: Progress | None = None,
+        control: Control | None = None,
+        cache: ThreadCache | None = None,
     ) -> None:
         """Fetch per-thread metadata (title/type/timestamps) for the inventory + link map.
 
-        Caches each full response (up to _THREAD_CACHE_CAP) so the export phase can reuse it
-        instead of fetching every thread a second time. Emits progress every 25 documents.
+        When a `cache` is given, each full response is written to a local disk cache so the
+        export phase reuses it (single fetch per document, O(1) memory, any account size).
+        Emits progress every 10 documents.
         """
         total = len(self.threads)
-        cache_on = total <= _THREAD_CACHE_CAP
-        if not cache_on:
-            log.info(
-                "Large account (%d docs): not caching bodies to limit memory; "
-                "export will re-fetch.",
-                total,
-            )
         log.info("Fetching metadata for %d documents...", total)
         if progress is not None:
             progress("metadata", 0, total, "reading documents")  # show the phase immediately
@@ -209,8 +199,8 @@ class Inventory:
             except Exception as exc:
                 log.warning("Failed to hydrate thread %s: %s", tid, exc)
                 continue
-            if cache_on:
-                self.thread_cache[tid] = resp
+            if cache is not None:
+                cache.put(tid, resp)
             thread = resp.get("thread", {})
             entry.title = thread.get("title") or entry.title or "Untitled"
             entry.type = thread.get("type", entry.type)

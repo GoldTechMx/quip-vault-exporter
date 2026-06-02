@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .assets import AssetRef, asset_set_hash, download_assets, rewrite_markdown_assets
+from .cache import ThreadCache
 from .comments import export_comments
 from .config import Config
 from .control import Control
@@ -55,15 +56,15 @@ class Exporter:
         state: StateDB,
         linkmap: LinkMap,
         secrets: list[str],
-        thread_cache: dict[str, dict[str, Any]] | None = None,
+        cache: ThreadCache | None = None,
     ) -> None:
         self._config = config
         self._client = client
         self._state = state
         self._linkmap = linkmap
         self._secrets = secrets
-        # Full thread responses captured during hydrate; popped here so each is fetched once.
-        self._cache = thread_cache if thread_cache is not None else {}
+        # Disk cache populated during hydrate; popped here so each thread is fetched once.
+        self._cache = cache
         self._pdf = PdfExporter(
             client,
             poll_interval=config.limits.pdf_poll_seconds,
@@ -124,9 +125,11 @@ class Exporter:
         if not dry:
             self._state.set_status(tid, "in_progress")
 
-        # Reuse the response captured during hydrate (pop frees memory as we go); only
-        # re-fetch if it wasn't cached (large-account fallback or resume).
-        thread_resp = self._cache.pop(tid, None) or self._client.get_thread(tid)
+        # Reuse the response captured during hydrate (disk cache, popped as we go); only
+        # re-fetch on a cache miss (e.g. resume, or a write that didn't land).
+        thread_resp = self._cache.pop(tid) if self._cache else None
+        if thread_resp is None:
+            thread_resp = self._client.get_thread(tid)
         thread = thread_resp.get("thread", {})
         html = thread_resp.get("html", "")
         record = self._linkmap.get(tid) or {"stem": "Untitled", "vault_path": ""}
