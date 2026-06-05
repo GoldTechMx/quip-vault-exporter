@@ -507,7 +507,7 @@ INDEX_HTML = """<!DOCTYPE html>
         <input id="out" type="text" value="./exports/quip-vault">
         <button id="browse" class="ghost" type="button" style="white-space:nowrap">Browse…</button>
       </div>
-      <div id="outinfo" class="muted" style="margin-top:6px">Paste a full path, or use Browse. Files are written here in the Export phase.</div>
+      <div id="outinfo" class="muted" style="margin-top:6px">Type a full path (the picker is optional). This path is on the machine running the server. <b>In Docker</b> it is inside the container, so keep it under the mounted volume (e.g. <code>./exports/quip-vault</code> = host <code>./exports</code>). When the export finishes, <b>copy the vault from this known location to wherever you want it</b> (NAS/share) with <code>robocopy</code> / <code>cp</code>.</div>
     </div></div>
     <div id="picker" class="picker" hidden>
       <div class="pkbar"><span id="pkpath" class="muted"></span><span id="pkwrite" class="muted"></span></div>
@@ -547,6 +547,7 @@ INDEX_HTML = """<!DOCTYPE html>
 <footer>Proudly Powered By <a href="https://goldtech.mx" target="_blank" rel="noopener">GoldTech MX</a></footer>
 <script>
 const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 let connected=false, poll=null, shown=0;
 function setConn(ok,name){connected=ok;$('#dot').className='dot'+(ok?' ok':'');$('#who').textContent=ok?('connected · '+name):'not connected';
   ['#btnInv','#btnExp','#btnVer'].forEach(s=>$(s).disabled=!ok);}
@@ -593,7 +594,14 @@ async function track(id){try{const j=await api('/api/jobs/'+id+'?since='+shown);
     $('#jstat').textContent=(j.paused?'⏸ paused · ':'')+line;}
   if(j.status!=='running'){clearInterval(poll);showControls(false);curJob=null;['#btnInv','#btnExp','#btnVer'].forEach(s=>$(s).disabled=!connected);
     if(j.status==='done'){$('#jdot').className='dot ok';$('#jstat').textContent=j.command+' done · '+fmt(j.elapsed);$('#bar').style.width='100%';
-      $('#summary').textContent=JSON.stringify(j.result);}
+      const r=j.result||{};let html='<code>'+esc(JSON.stringify(r))+'</code>';
+      if(r.output_dir){html+='<div style="margin-top:8px;padding:10px;border:1px solid #2a3550;border-radius:8px;line-height:1.5">'
+        +'✅ <b>Vault written to:</b> <code>'+esc(r.output_dir)+'</code><br>'
+        +'<b>Next step:</b> copy it from this known location to wherever you want it (NAS / share). '
+        +'In Docker this folder is your mounted <code>./exports</code> on the host. Example:<br>'
+        +'<code>robocopy "&lt;host&gt;\\exports\\quip-vault" "\\\\server\\share\\quip_export" /E /MT:16</code>'
+        +' &nbsp;·&nbsp; <code>cp -a ./exports/quip-vault /path/to/destination</code></div>';}
+      $('#summary').innerHTML=html;}
     else if(j.status==='cancelled'){$('#jdot').className='dot';$('#jstat').textContent=j.command+' cancelled';
       $('#summary').textContent='Cancelled. Re-run Export to continue where it left off (already-downloaded docs are skipped).';}
     else{$('#jdot').className='dot err';$('#jstat').textContent=j.command+' failed';$('#summary').textContent=j.error||'';}}
