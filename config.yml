@@ -1,0 +1,62 @@
+# Quip Vault Exporter - configuracion (SIN TOKENS AQUI; el token vive solo en .env)
+workspace_name: "Company Quip Archive"
+
+# IMPORTANTE: escribe a un DISCO LOCAL primero (rapido + resumible + sin cortes de red
+# durante una corrida de varios dias), y al terminar copia a tu share con robocopy. Escribir
+# decenas de miles de archivos chicos directo a un share de red es mucho mas lento y fragil.
+# Usa diagonales normales "/" (Python las maneja en Windows y evitan lios de escape en YAML).
+output_dir: "D:/quip_export"
+# Si de verdad quieres escribir directo al share, descomenta esta linea (corriendo NATIVO en
+# Windows la UNC funciona; NO sirve dentro de Docker Linux):
+# output_dir: '\\novarummx\Respaldo DD RB\quip_export'
+
+obsidian_mode: true
+
+export:
+  markdown: true
+  html: true
+  pdf: false          # render async; ~10 min por doc grande. Dejalo en false salvo que lo necesites.
+  json_raw: true
+  comments: true      # historia completa via paginacion (NO se corta en 25). +1 lectura/doc.
+  attachments: true
+  spreadsheets: true  # XLSX/PDF/HTML/JSON; CSV derivado localmente.
+
+folders:
+  include_starred_root: true
+  include_shared_folders: true
+  include_archived: false
+  root_folder_ids: []
+
+naming:
+  sanitize_filenames: true
+  prefix_with_modified_date: false
+  handle_duplicates: "append_thread_id"
+  max_filename_length: 180
+
+obsidian:
+  wikilinks: true
+  path_aliased_links: true
+  yaml_frontmatter: true
+  assets_folder_name: "_assets"
+  comments_folder_name: "_comments"
+  manifest_folder_name: "_manifest"
+  unfiled_folder_name: "_unfiled"
+
+limits:
+  requests_per_minute: 50
+  requests_per_hour: 750
+  company_requests_per_minute: 600
+  retry_count: 5
+  retry_backoff_seconds: 3
+  pdf_poll_seconds: 15
+  pdf_timeout_seconds: 600
+
+safety:
+  dry_run: false
+  overwrite_existing: false
+  preserve_raw_api_responses: true
+
+compliance:
+  redact_emails: false
+  export_users: true
+  export_permissions: true

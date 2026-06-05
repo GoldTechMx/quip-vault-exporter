@@ -7,6 +7,7 @@ or the SQLite state DB.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -162,3 +163,30 @@ class Config(BaseModel):
 
 class ConfigError(Exception):
     """Raised for invalid or missing configuration."""
+
+
+def validate_output_dir(output_dir: Path | str, *, posix: bool | None = None) -> Path:
+    """Reject a Windows path used on a POSIX host (the classic Docker foot-gun).
+
+    On Linux a back-slash is an ordinary filename character, so a path like
+    `\\\\host\\share\\quip_export` (a Windows UNC path) does NOT mean a network share - it
+    becomes a single literal directory of that name inside the container, written to the
+    ephemeral writable layer and lost when the container is removed. A whole multi-hour
+    export silently lands there instead of on the mounted volume. Catch it up-front with an
+    actionable message instead of after the run finishes.
+
+    `posix` overrides platform detection (for tests); defaults to the real host.
+    """
+    is_posix = (os.sep == "/") if posix is None else posix
+    if is_posix and "\\" in str(output_dir):
+        raise ConfigError(
+            f"output_dir {str(output_dir)!r} looks like a Windows path, but this process is "
+            "running on POSIX (most likely inside a Linux Docker container). On Linux a "
+            "back-slash is a normal filename character, so the whole export would be written "
+            "to a literal folder of that name inside the container (and lost when the "
+            "container is removed), not to your share.\n"
+            "Fix: point output_dir at a path INSIDE the container under the mounted volume, "
+            "e.g. /app/exports/quip-vault (then copy ./exports to your share); or run the tool "
+            "natively on Windows, where a UNC path like \\\\host\\share works directly."
+        )
+    return Path(output_dir)

@@ -58,9 +58,17 @@ quip-vault-exporter serve                  # opens http://127.0.0.1:8000  (local
 ```
 
 Open <http://127.0.0.1:8000>, paste your token (from `https://<tenant>.quip.com/dev/token`),
-click **Validate token**, choose an output folder, and hit **Export**. You get a live
-progress bar with ETA, **Pause / Resume / Cancel**, and a server-side folder picker. Tick
-**Remember in .env** and it auto-connects next time.
+click **Validate token**, set the **output folder**, and hit **Export**. You get a live
+progress bar with ETA and **Pause / Resume / Cancel**. Tick **Remember in .env** and it
+auto-connects next time.
+
+> 📁 **About the output folder.** You can just **type the path** into the box - the folder
+> picker is optional. That picker is a **server-side** list of folders *on the machine the
+> server runs on*; a browser cannot open your OS's native "Browse for folder" dialog (web
+> security forbids it), so it will not look like the standard Windows/macOS dialog. **Where
+> the path resolves depends on whether you run natively or in Docker - see
+> [Where your files go](#-where-your-files-go-output-path--docker-vs-native) before you start
+> a long export.**
 
 ### Option B - Command line
 
@@ -76,6 +84,45 @@ quip-vault-exporter verify
 
 > 💡 You do **not** need to run `inventory` before `export` - `export` does it internally.
 > Running both separately just repeats the (slow) scan.
+
+---
+
+## 📂 Where your files go (output path & Docker vs native)
+
+The single most important thing to get right before a multi-hour export: **the output path is
+interpreted on the machine the tool runs on.** Native on Windows, that's your Windows drives.
+Inside Docker, that's the **Linux container's** filesystem - which is ephemeral unless the
+path is on a mounted volume.
+
+> ### ⚠️ Never put a Windows path in `output_dir` when running in Docker
+> On Linux a back-slash (`\`) is an ordinary filename character, not a separator. So a
+> Windows path like `\\server\share\quip_export` or `C:\Users\me\quip` does **not** mean a
+> network share or drive inside a Linux container - it becomes a single literal folder of
+> that name in the container's throwaway layer, and **the whole export is lost when the
+> container is removed.** The tool now **refuses** such a path up-front (fails in seconds with
+> a clear message) instead of discovering it after the run. But know the rule.
+
+### Pick your mode
+
+| | **Native (Windows / macOS / Linux)** | **Docker** |
+|---|---|---|
+| Run | `quip-vault-exporter serve` (or `export`) | `docker compose --profile web up web` |
+| What the folder picker lists | your real drives (`C:\`, `D:\`, network shares) | the container's Linux dirs (`/app`, `/home`) |
+| Set `output_dir` to | a real local path, e.g. `D:/quip_export`, or a UNC share `\\server\share\quip_export` | a path **under the mounted volume**, e.g. `./exports/quip-vault` (shows as `/app/exports/quip-vault`) |
+| Where files land on the host | exactly where you pointed it | `./exports/...` next to the compose file (the volume maps `./exports` → `/app/exports`) |
+
+**Recommended for large accounts:** export to a **local disk first** (e.g. `D:/quip_export`),
+then copy the finished vault to your NAS/SharePoint with `robocopy` (Windows) or `rsync`.
+Writing tens of thousands of small files straight to a network share during a days-long run is
+slow and fragile; a local disk is fast and the export stays resumable.
+
+```powershell
+# Windows: after the export finishes, push the vault to your share
+robocopy "D:\quip_export" "\\server\share\quip_export" /E /COPY:DAT /R:2 /W:2 /MT:16
+```
+
+> 💡 **Tip:** you don't have to use the folder picker at all - typing the path into the box
+> (or setting `output_dir` in `config.yml`) is always fine.
 
 ---
 
@@ -209,6 +256,14 @@ docker compose --profile web up web --build      # then open http://127.0.0.1:80
 docker compose run --rm exporter export
 ```
 
+> ⚠️ **In Docker, set `output_dir` to a path under the mounted volume** - the default
+> `./exports/quip-vault` (which the UI shows as `/app/exports/quip-vault`) is correct and lands
+> on the host next to `docker-compose.yml`. Do **not** enter a Windows path (`\\server\...` or
+> `C:\...`); see [Where your files go](#-where-your-files-go-output-path--docker-vs-native).
+> The `docker-compose.yml` volume maps `./exports` → `/app/exports`. To export straight to a
+> host folder or share, mount it there (e.g. `- D:/quip_export:/app/exports`) and keep
+> `output_dir: /app/exports/quip-vault`.
+
 Production image: multi-stage, **non-root**, pinned `requirements.lock`. Pushing a `vX.Y.Z`
 tag builds and publishes the wheel and image to GHCR (see `.github/workflows/release.yml`).
 
@@ -236,6 +291,9 @@ sign off before canceling Quip.
 | `HTTP 503 Over Rate Limit` | Normal under load - the client auto-pauses and resumes. |
 | Wrong tenant host | Set `QUIP_BASE_URL` (enterprise tenants are not all on `platform.quip.com`). |
 | Slow writes to a NAS | Export to a local disk, then copy the vault to the share. |
+| Folder picker shows `/app`, `/home`, etc. (not my drives) | You're running in **Docker**, so the picker lists the *container's* Linux folders. Just type `./exports/quip-vault`, or run natively for Windows drives. See [Where your files go](#-where-your-files-go-output-path--docker-vs-native). |
+| `output_dir ... looks like a Windows path` error | You passed a Windows path (`\\server\...` / `C:\...`) while running in a Linux container. Use a path under the mounted volume (`/app/exports/...`), or run natively on Windows. |
+| Export finished but the target folder is empty | Almost always a Docker output-path mistake (vault written inside the container). Use a mounted-volume path; see [Where your files go](#-where-your-files-go-output-path--docker-vs-native). |
 
 ---
 

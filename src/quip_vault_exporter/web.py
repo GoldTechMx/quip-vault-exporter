@@ -25,7 +25,7 @@ from pydantic import SecretStr
 
 from . import __version__
 from .cache import RawStore
-from .config import Config, ExportToggles, Settings
+from .config import Config, ConfigError, ExportToggles, Settings, validate_output_dir
 from .control import Cancelled, Control
 from .inventory import Inventory
 from .logging_setup import RedactionFilter, scrub_text
@@ -59,6 +59,7 @@ class Job:
     command: str
     status: str = "running"  # running | done | failed | cancelled
     logs: list[str] = field(default_factory=list)
+    log_dropped: int = 0  # cumulative lines trimmed off the front (so `since` stays absolute)
     total: int = 0
     result: dict[str, Any] | None = None
     error: str | None = None
@@ -91,7 +92,10 @@ class _JobLogHandler(logging.Handler):
         except Exception:
             return
         job.logs.append(line)
-        del job.logs[:-1000]  # keep the tail bounded
+        overflow = len(job.logs) - 1000  # keep the tail bounded
+        if overflow > 0:
+            del job.logs[:overflow]
+            job.log_dropped += overflow  # remember how many we dropped, so `since` stays absolute
 
 
 def _install_logging() -> None:
@@ -195,7 +199,7 @@ def _settings() -> Settings:
 def _build_config(opts: dict[str, Any]) -> Config:
     cfg = Config()
     if opts.get("output_dir"):
-        cfg.output_dir = Path(opts["output_dir"])
+        cfg.output_dir = validate_output_dir(opts["output_dir"])
     cfg.export = ExportToggles(
         markdown=opts.get("markdown", True),
         html=opts.get("html", True),
@@ -347,14 +351,19 @@ def create_app() -> Any:
             raise HTTPException(status_code=400, detail="Unknown command.")
         if not _session["token"]:
             raise HTTPException(status_code=400, detail="Validate a token first.")
+        # Validate settings + output path BEFORE registering the job, so a bad path fails
+        # immediately with a clear 400 (and never orphans `_active`, which would wedge /api/run).
+        try:
+            settings = _settings()
+            cfg = _build_config(body.get("options", {}))
+        except (ConfigError, QuipError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         with _lock:
             if _active is not None and _active.status == "running":
                 raise HTTPException(status_code=409, detail="A job is already running.")
             job = Job(id=uuid.uuid4().hex[:12], command=command)
             _jobs[job.id] = job
             _active = job
-        settings = _settings()
-        cfg = _build_config(body.get("options", {}))
         threading.Thread(target=_run_job, args=(job, settings, cfg), daemon=True).start()
         return JSONResponse({"job_id": job.id})
 
@@ -399,8 +408,10 @@ def create_app() -> Any:
                 "eta": None if eta is None else round(eta, 1),
                 "result": job.result,
                 "error": job.error,
-                "logs": job.logs[since:],
-                "log_count": len(job.logs),
+                # `since` is an absolute line index; map it past any trimmed-off lines. If the
+                # client fell >1000 lines behind, it gets the whole retained tail (never frozen).
+                "logs": job.logs[max(0, since - job.log_dropped) :],
+                "log_count": job.log_dropped + len(job.logs),
             }
         )
 

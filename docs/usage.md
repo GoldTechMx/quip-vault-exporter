@@ -28,6 +28,20 @@ quip-vault-exporter export --force     # re-download and re-render everything (i
 quip-vault-exporter export -c path/to/config.yml
 ```
 
+## Output path: native vs Docker
+`output_dir` is resolved on the machine the tool runs on.
+
+- **Native** (Windows/macOS/Linux): use a real local path (`D:/quip_export`) or a UNC share
+  (`\\server\share\quip_export`, Windows only).
+- **Docker**: use a path **under the mounted volume**, e.g. `output_dir: /app/exports/quip-vault`
+  (the compose file maps `./exports` -> `/app/exports`). A Windows path inside a Linux container
+  becomes a literal back-slash folder in the container's throwaway layer and is **rejected**
+  up-front. To write straight to a host folder, mount it (e.g. `- D:/quip_export:/app/exports`).
+
+The web UI folder picker is **server-side** (it lists the server's folders, not your OS's native
+dialog); typing the path is always fine. For big accounts, export to a local disk and copy to the
+share afterwards (`robocopy` / `rsync`).
+
 ## Admin / organization export (Phase 4)
 With `QUIP_ADMIN_MODE=true` + `QUIP_ADMIN_TOKEN` set, the export can additionally pull
 org-level metadata. Because this reads the **whole tenant** (a bulk PII extract), it is

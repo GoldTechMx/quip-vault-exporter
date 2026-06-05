@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .cache import RawStore
-from .config import Config
+from .config import Config, validate_output_dir
 from .control import Control
 from .downloader import Downloader, DownloadStats
 from .inventory import Inventory
@@ -61,6 +61,7 @@ def run_export(
     progress: Progress = None,
     control: Control | None = None,
 ) -> ExportRun:
+    validate_output_dir(config.output_dir)  # fail fast on a Windows path inside a Linux container
     mdir = ensure_dir(Path(config.output_dir) / config.obsidian.manifest_folder_name)
 
     inv = Inventory(config, client)
